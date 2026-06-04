@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.1.2
+// @version      0.1.3
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-start
@@ -23,7 +23,7 @@
   const ENRICHED_ATTR = "data-work-profile-enriched";
   const SELECTED_ENRICHED_ATTR = "data-selected-work-profile-enriched-id";
 
-  console.log("🔍 SAP SuccessFactors Profile Enhancer userscript starting...");
+  console.log("🔍 SAP SuccessFactors UI Hack userscript starting...");
 
   applyStyleHacks();
   startKeepSessionAliveWhenAvailable();
