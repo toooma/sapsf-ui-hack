@@ -129,6 +129,18 @@
     );
   }
 
+  function replaceEmploymentTextAt(container, index, value) {
+    if (!container || index == null || !value) return false;
+
+    const textEls = container.querySelectorAll("ui5-text-xweb-people-profile");
+    const targetEl = textEls[index];
+
+    if (!targetEl) return false;
+
+    targetEl.textContent = `${value}\u200e`;
+    return true;
+  }
+
   function enrichWorkProfileItem(profile) {
     if (!profile?.id) return false;
 
@@ -142,6 +154,8 @@
 
     const container = findEmploymentContainer(li);
     if (!container) return false;
+
+    replaceEmploymentTextAt(container, 0, profile?.custom05);
 
     const rows = [
       [
@@ -190,6 +204,8 @@
 
     const container = findEmploymentContainer(selectedEmployment);
     if (!container) return false;
+
+    replaceEmploymentTextAt(container, 0, profile.custom05);
 
     container
       .querySelectorAll("[data-selected-work-profile-extra='true']")
@@ -280,7 +296,7 @@
 
             try {
               const workforcePersonProfile = await fetchJson(
-                `/rest/workforce/v1/workforcePersonProfiles/${id}?$expand=workProfiles($select=id,displayTitle,legacyId,displayName,departmentName,departmentId,locationName,locationId,isPrimary,assignmentTag,isActive,workerType,timeZone,hireDate,serviceDate,companyExitDate,custom02,custom04,employeeClass,hrManagerId)&$select=id,personId,displayName,internalId,externalId,email,dateOfBirth`
+                `/rest/workforce/v1/workforcePersonProfiles/${id}?$expand=workProfiles($select=id,displayTitle,legacyId,displayName,departmentName,departmentId,locationName,locationId,isPrimary,assignmentTag,isActive,workerType,timeZone,hireDate,serviceDate,companyExitDate,custom02,custom05,hrManagerId)&$select=id,personId,displayName,internalId,externalId,email,dateOfBirth`
               );
 
               console.log("workforcePersonProfile details:", workforcePersonProfile);
