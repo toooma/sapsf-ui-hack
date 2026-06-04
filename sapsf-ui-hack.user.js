@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.1.4
+// @version      0.1.5
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-start
@@ -155,7 +155,7 @@
     const container = findEmploymentContainer(li);
     if (!container) return false;
 
-    replaceEmploymentTextAt(container, 0, profile?.custom05);
+    replaceEmploymentTextAt(container, 1, profile?.custom05);
 
     const rows = [
       [
@@ -205,7 +205,7 @@
     const container = findEmploymentContainer(selectedEmployment);
     if (!container) return false;
 
-    replaceEmploymentTextAt(container, 0, profile.custom05);
+    replaceEmploymentTextAt(container, 1, profile?.custom05);
 
     container
       .querySelectorAll("[data-selected-work-profile-extra='true']")
