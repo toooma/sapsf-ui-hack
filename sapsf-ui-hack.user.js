@@ -141,6 +141,18 @@
     return true;
   }
 
+  function removeEmploymentTextAt(container, index) {
+    if (!container || index == null) return false;
+
+    const textEls = container.querySelectorAll("ui5-text-xweb-people-profile");
+    const targetEl = textEls[index];
+
+    if (!targetEl) return false;
+
+    targetEl.remove();
+    return true;
+  }
+
   function enrichWorkProfileItem(profile) {
     if (!profile?.id) return false;
 
@@ -155,7 +167,7 @@
     const container = findEmploymentContainer(li);
     if (!container) return false;
 
-    replaceEmploymentTextAt(container, 1, profile?.custom05);
+    removeEmploymentTextAt(container, 1);
 
     const rows = [
       [
@@ -167,6 +179,7 @@
       ],
       ["Position", profile.custom02],
       ["Department", profile.departmentName],
+      ["Entity", profile.custom05],
       ["User Id", profile.legacyId]
     ];
 
@@ -205,7 +218,7 @@
     const container = findEmploymentContainer(selectedEmployment);
     if (!container) return false;
 
-    replaceEmploymentTextAt(container, 1, profile?.custom05);
+    removeEmploymentTextAt(container, 1);
 
     container
       .querySelectorAll("[data-selected-work-profile-extra='true']")
@@ -221,6 +234,7 @@
       ],
       ["Position", profile.custom02],
       ["Department", profile.departmentName],
+      ["Entity", profile.custom05],
       ["User Id", profile.legacyId]
     ];
 
