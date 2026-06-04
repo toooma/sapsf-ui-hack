@@ -49,9 +49,8 @@
 
       .ui5Custom {
         display: block;
-        font-size: 0.75rem;
-        opacity: 0.9;
-        marginTop: 2px;
+        font-size: 1rem;
+        opacity: 1;
         text-align: start;
       }
 
