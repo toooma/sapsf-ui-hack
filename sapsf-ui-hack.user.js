@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.3.3
+// @version      0.3.4
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -210,7 +210,6 @@
     removeDirectChildUi5Texts(container);
 
     const rows = [
-      ["", profile.isActive ? "🟢 Active" : "⚫ Inactive"],
       [
         "",
         [
@@ -222,6 +221,7 @@
       ["Department", profile.departmentName],
       ["Entity", profile.custom05],
       ["User Id", profile.legacyId]
+      ["", profile.isActive ? "🟢 Active" : "⚫ Inactive"],
     ];
 
     for (const [label, value] of rows) {
@@ -283,6 +283,7 @@
       ["Department", profile.departmentName],
       ["Entity", profile.custom05],
       ["User Id", profile.legacyId]
+      ["", profile.isActive ? "🟢 Active" : "⚫ Inactive"],
     ];
 
     for (const [label, value] of rows) {
