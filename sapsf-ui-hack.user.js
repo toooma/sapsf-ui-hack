@@ -60,7 +60,7 @@
       }
 
       div[class^="HeaderFieldsDisplay_container__"] {
-        display: none;
+        display: none !important;
       }
 
     `;
