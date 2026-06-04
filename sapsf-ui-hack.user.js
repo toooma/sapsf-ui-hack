@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.1.7
+// @version      0.1.8
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-start
@@ -38,6 +38,13 @@
     style.textContent = `
       .ectTextArea {
         resize: both !important;
+      }
+
+      #selectedEmployment ui5-text-xweb-people-profile,
+      #selectedEmployment ui5-text-xweb-people-profile * {
+        user-select: text !important;
+        -webkit-user-select: text !important;
+        cursor: text !important;
       }
     `;
 
