@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.2.1
+// @version      0.2.2
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-start
@@ -160,7 +160,14 @@
     return Array.from(li.querySelectorAll("div")).find(div =>
       Array.from(div.classList).some(cls =>
         cls.startsWith("EmploymentListItem_container__")
-        || cls.startsWith("FullProfileDetailView_contentWrapper__")
+      )
+    );
+  }
+
+  function findFullProfileDetailContainer() {
+    return Array.from(document.querySelectorAll("div")).find(div =>
+      Array.from(div.classList).some(cls =>
+        cls.startsWith("FullProfileDetailView_contentWrapper__")
       )
     );
   }
@@ -260,18 +267,30 @@
     if (!profile) return false;
 
     const selectedEmployment = document.querySelector("#selectedEmployment");
-    if (!selectedEmployment) return false;
+    const fullProfileContainer = findFullProfileDetailContainer();
+
+    if (!selectedEmployment && !fullProfileContainer) return false;
+
+    const enrichmentMarkerEl = selectedEmployment || fullProfileContainer;
 
     if (
-      selectedEmployment.getAttribute(SELECTED_ENRICHED_ATTR) === selectedProfileId
+      enrichmentMarkerEl.getAttribute(SELECTED_ENRICHED_ATTR) === selectedProfileId
     ) {
       return true;
     }
 
-    const container = findEmploymentContainer(selectedEmployment);
-    if (!container) return false;
+    let container = selectedEmployment
+      ? findEmploymentContainer(selectedEmployment)
+      : null;
 
-    removeEmploymentTextAt(container, 1);
+    let isFullProfileFallback = false;
+
+    if (!container) {
+      container = fullProfileContainer;
+      isFullProfileFallback = true;
+    }
+
+    if (!container) return false;
 
     container
       .querySelectorAll("[data-selected-work-profile-extra='true']")
@@ -300,7 +319,7 @@
       }
     }
 
-    selectedEmployment.setAttribute(SELECTED_ENRICHED_ATTR, selectedProfileId);
+    enrichmentMarkerEl.setAttribute(SELECTED_ENRICHED_ATTR, selectedProfileId);
 
     console.log("✅ Enriched selected employment:", selectedProfileId);
 
