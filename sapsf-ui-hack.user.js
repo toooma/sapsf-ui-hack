@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.3.6
+// @version      0.3.7
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -220,7 +220,7 @@
       ["Position", profile.custom02],
       ["Department", profile.departmentName],
       ["Entity", profile.custom05],
-      ["User Id", profile.legacyId],
+      ["UserId", profile.legacyId],
       ["", profile.isActive ? "🟢 Active" : "⚫ Inactive"],
     ];
 
@@ -281,7 +281,7 @@
       ["Position", profile.custom02],
       ["Department", profile.departmentName],
       ["Entity", profile.custom05],
-      ["User Id", profile.legacyId],
+      ["UserId", profile.legacyId],
       ["", profile.isActive ? "🟢 Active" : "⚫ Inactive"],
     ];
 
