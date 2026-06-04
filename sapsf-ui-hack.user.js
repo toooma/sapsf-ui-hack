@@ -49,7 +49,7 @@
 
       .ui5Custom {
         display: block;
-        font-size: 1rem;
+        font-size: 0.9rem;
         opacity: 1;
         text-align: start;
       }
