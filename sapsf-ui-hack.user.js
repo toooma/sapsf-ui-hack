@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.3.1
+// @version      0.3.3
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -49,7 +49,7 @@
 
       .ui5Custom {
         display: block;
-        font-size: 0.9rem;
+        font-size: 0.8rem;
         opacity: 1;
         text-align: start;
       }
@@ -57,6 +57,10 @@
       div[class*="EmploymentListItem_container__"] > ui5-text-xweb-people-profile:not(.ui5Custom),
       div[class*="FullProfileDetailView_contentWrapper__"] > ui5-text-xweb-people-profile:not(.ui5Custom) {
         display: none !important;
+      }
+
+      div[class^="HeaderFieldsDisplay_container__"] {
+        display: none;
       }
 
     `;
@@ -149,18 +153,14 @@
   }
 
   function findEmploymentContainer(li) {
-    return Array.from(li.querySelectorAll("div")).find(div =>
-      Array.from(div.classList).some(cls =>
-        cls.startsWith("EmploymentListItem_container__")
-      )
+    return li.querySelector(
+      'div[class^="EmploymentListItem_container__"], div[class*=" EmploymentListItem_container__"]'
     );
   }
 
   function findFullProfileDetailContainer() {
-    return Array.from(document.querySelectorAll("div")).find(div =>
-      Array.from(div.classList).some(cls =>
-        cls.startsWith("FullProfileDetailView_contentWrapper__")
-      )
+    return document.querySelector(
+      'div[class^="FullProfileDetailView_contentWrapper__"], div[class*=" FullProfileDetailView_contentWrapper__"]'
     );
   }
 
@@ -210,7 +210,7 @@
     removeDirectChildUi5Texts(container);
 
     const rows = [
-      ["Status", profile.isActive ? "Active" : "Inactive"],
+      ["", profile.isActive ? "🟢 Active" : "⚫ Inactive"],
       [
         "",
         [
@@ -238,14 +238,15 @@
 
   function enrichSelectedEmployment(workProfiles = []) {
 
-    let profile;
-    if (workProfiles.length === 1) {
-      profile = workProfiles[0];
-    } else {
-      const popover = document.querySelector("ui5-popover-xweb-people-profile[initial-focus]");
-      const selectedProfileId = popover?.getAttribute("initial-focus");
-      profile = workProfiles.find(p => p?.id === selectedProfileId);
-    }
+    const selectedProfileId = document
+      .querySelector("ui5-popover-xweb-people-profile[initial-focus]")
+      ?.getAttribute("initial-focus");
+
+    const profile =
+      workProfiles.length === 1
+        ? workProfiles[0]
+        : workProfiles.find(p => p?.id === selectedProfileId);
+
     if (!profile) return false;
 
     const selectedEmployment = document.querySelector("#selectedEmployment");
@@ -261,7 +262,7 @@
       return true;
     }
 
-    let container = selectedEmployment
+    const container = selectedEmployment
       ? findEmploymentContainer(selectedEmployment)
       : fullProfileContainer;
 
@@ -270,7 +271,7 @@
     removeDirectChildUi5Texts(container);
 
     const rows = [
-      ["Status", profile.isActive ? "Active" : "Inactive"],
+      ["", profile.isActive ? "🟢 Active" : "⚫ Inactive"],
       [
         "",
         [
