@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.2.7
+// @version      0.2.8
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -158,28 +158,16 @@
     );
   }
 
-  function replaceEmploymentTextAt(container, index, value) {
-    if (!container || index == null || !value) return false;
+  function removeDirectChildUi5Texts(container) {
+    if (!container) return false;
 
-    const textEls = container.querySelectorAll("ui5-text-xweb-people-profile");
-    const targetEl = textEls[index];
+    const textEls = Array.from(container.children).filter(
+      child => child.matches?.("ui5-text-xweb-people-profile")
+    );
 
-    if (!targetEl) return false;
+    textEls.forEach(el => el.remove());
 
-    targetEl.textContent = `${value}\u200e`;
-    return true;
-  }
-
-  function removeEmploymentTextAt(container, index) {
-    if (!container || index == null) return false;
-
-    const textEls = container.querySelectorAll("ui5-text-xweb-people-profile");
-    const targetEl = textEls[index];
-
-    if (!targetEl) return false;
-
-    targetEl.remove();
-    return true;
+    return textEls.length > 0;
   }
 
   function extractBracketCode(value) {
@@ -213,7 +201,7 @@
     const container = findEmploymentContainer(li);
     if (!container) return false;
 
-    removeEmploymentTextAt(container, 1);
+    removeDirectChildUi5Texts(container);
 
     const rows = [
       [
@@ -272,7 +260,7 @@
 
     if (!container) return false;
 
-    if (selectedEmployment) removeEmploymentTextAt(container, 1);
+    removeDirectChildUi5Texts(container);
 
     const rows = [
       [
