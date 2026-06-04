@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.2.4
+// @version      0.2.5
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-start
@@ -258,7 +258,7 @@
     const enrichmentMarkerEl = selectedEmployment || fullProfileContainer;
 
     if (
-      enrichmentMarkerEl.getAttribute(SELECTED_ENRICHED_ATTR) === selectedProfileId
+      enrichmentMarkerEl.getAttribute(SELECTED_ENRICHED_ATTR) === profile.id
     ) {
       return true;
     }
@@ -298,9 +298,9 @@
       }
     }
 
-    enrichmentMarkerEl.setAttribute(SELECTED_ENRICHED_ATTR, selectedProfileId);
+    enrichmentMarkerEl.setAttribute(SELECTED_ENRICHED_ATTR, profile.id);
 
-    console.log("✅ Enriched selected employment:", selectedProfileId);
+    console.log("✅ Enriched selected employment:", profile.id);
 
     return true;
   }
