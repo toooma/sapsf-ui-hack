@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.2.5
+// @version      0.2.7
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
-// @run-at       document-start
+// @run-at       document-end
 // @icon         https://img.icons8.com/ios-filled/100/circled-s.png
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/toooma/sapsf-ui-hack/main/sapsf-ui-hack.user.js
@@ -46,6 +46,15 @@
         -webkit-user-select: text !important;
         cursor: text !important;
       }
+
+      .ui5CustomText {
+        display: block;
+        font-size: 0.75rem;
+        opacity: 0.9;
+        marginTop: 2px;
+        text-align: start;
+      }
+
     `;
 
     document.documentElement.appendChild(style);
@@ -116,26 +125,19 @@
     if (!value) return null;
 
     const el = document.createElement("ui5-text-xweb-people-profile");
-    el.setAttribute("empty-indicator-mode", "Off");
+    el.classList.add("ui5CustomText");
 
     if (label === "Position") {
       const link = createPositionLink(value);
       if (link) {
         el.textContent = `${label}: `;
         el.appendChild(link);
-        el.appendChild(document.createTextNode("\u200e"));
       } else {
-        el.textContent = `${label}: ${value}\u200e`;
+        el.textContent = `${label}: ${value}`;
       }
     } else {
-      el.textContent = `${label}${label ? ": " : ""}${value}\u200e`;
+      el.textContent = `${label}${label ? ": " : ""}${value}`;
     }
-
-    el.style.display = "block";
-    el.style.fontSize = "0.75rem";
-    el.style.opacity = "0.85";
-    el.style.marginTop = "2px";
-    el.style.textAlign = "start";
 
     return el;
   }
@@ -240,6 +242,7 @@
   }
 
   function enrichSelectedEmployment(workProfiles = []) {
+
     let profile;
     if (workProfiles.length === 1) {
       profile = workProfiles[0];
@@ -271,10 +274,6 @@
 
     if (selectedEmployment) removeEmploymentTextAt(container, 1);
 
-    // container
-    //   .querySelectorAll("[data-selected-work-profile-extra='true']")
-    //   .forEach(el => el.remove());
-
     const rows = [
       [
         "",
@@ -291,11 +290,7 @@
 
     for (const [label, value] of rows) {
       const textEl = createUi5Text(label, value);
-
-      if (textEl) {
-        // textEl.setAttribute("data-selected-work-profile-extra", "true");
-        container.appendChild(textEl);
-      }
+      if (textEl) container.appendChild(textEl);
     }
 
     enrichmentMarkerEl.setAttribute(SELECTED_ENRICHED_ATTR, profile.id);
