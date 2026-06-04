@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.2.2
+// @version      0.2.4
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-start
@@ -110,22 +110,6 @@
     } finally {
       internalFetch = false;
     }
-  }
-
-  function createUi5Text(label, value) {
-    if (!value) return null;
-
-    const el = document.createElement("ui5-text-xweb-people-profile");
-    el.setAttribute("empty-indicator-mode", "Off");
-    el.textContent = `${label}${label ? ": " : ""}${value}\u200e`;
-
-    el.style.display = "block";
-    el.style.fontSize = "0.75rem";
-    el.style.opacity = "0.85";
-    el.style.marginTop = "2px";
-    el.style.textAlign = "start";
-
-    return el;
   }
 
   function createUi5Text(label, value) {
@@ -256,14 +240,14 @@
   }
 
   function enrichSelectedEmployment(workProfiles = []) {
-    const popover = document.querySelector(
-      "ui5-popover-xweb-people-profile[initial-focus]"
-    );
-
-    const selectedProfileId = popover?.getAttribute("initial-focus");
-    if (!selectedProfileId) return false;
-
-    const profile = workProfiles.find(p => p?.id === selectedProfileId);
+    let profile;
+    if (workProfiles.length === 1) {
+      profile = workProfiles[0];
+    } else {
+      const popover = document.querySelector("ui5-popover-xweb-people-profile[initial-focus]");
+      const selectedProfileId = popover?.getAttribute("initial-focus");
+      profile = workProfiles.find(p => p?.id === selectedProfileId);
+    }
     if (!profile) return false;
 
     const selectedEmployment = document.querySelector("#selectedEmployment");
@@ -281,20 +265,15 @@
 
     let container = selectedEmployment
       ? findEmploymentContainer(selectedEmployment)
-      : null;
-
-    let isFullProfileFallback = false;
-
-    if (!container) {
-      container = fullProfileContainer;
-      isFullProfileFallback = true;
-    }
+      : fullProfileContainer;
 
     if (!container) return false;
 
-    container
-      .querySelectorAll("[data-selected-work-profile-extra='true']")
-      .forEach(el => el.remove());
+    if (selectedEmployment) removeEmploymentTextAt(container, 1);
+
+    // container
+    //   .querySelectorAll("[data-selected-work-profile-extra='true']")
+    //   .forEach(el => el.remove());
 
     const rows = [
       [
@@ -314,7 +293,7 @@
       const textEl = createUi5Text(label, value);
 
       if (textEl) {
-        textEl.setAttribute("data-selected-work-profile-extra", "true");
+        // textEl.setAttribute("data-selected-work-profile-extra", "true");
         container.appendChild(textEl);
       }
     }
@@ -334,7 +313,7 @@
 
       const selectedDone = enrichSelectedEmployment(workProfiles);
 
-      if (!remaining.length && selectedDone) {
+      if (!remaining.length || selectedDone) {
         observer.disconnect();
         console.log("✅ All work profile items enriched.");
       }
