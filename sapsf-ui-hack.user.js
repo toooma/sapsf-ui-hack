@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.1.0
+// @version      0.1.1
 // @description  Adds additional employment information to SAP SuccessFactors People Profile pages.
 // @author       Your Name
 // @match        https://hcm55.sapsf.eu/*
