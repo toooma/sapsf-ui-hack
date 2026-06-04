@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.1.9
+// @version      0.2.1
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-start
@@ -160,6 +160,7 @@
     return Array.from(li.querySelectorAll("div")).find(div =>
       Array.from(div.classList).some(cls =>
         cls.startsWith("EmploymentListItem_container__")
+        || cls.startsWith("FullProfileDetailView_contentWrapper__")
       )
     );
   }
@@ -199,13 +200,9 @@
     const a = document.createElement("a");
     a.href = `/xi/ui/ect/pages/positionMgmt/position.xhtml?m=PositionManagement&#t=Position&e=${encodeURIComponent(code)}`;
     a.textContent = value;
-    // a.target = "_blank";
-    // a.rel = "noopener noreferrer";
-
     a.style.color = "inherit";
     a.style.textDecoration = "underline";
-    a.style.cursor = "pointer";
-
+    a.style.setProperty("cursor", "pointer", "important");
     return a;
   }
 
