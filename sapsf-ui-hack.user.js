@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.2.8
+// @version      0.2.9
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -47,7 +47,7 @@
         cursor: text !important;
       }
 
-      .ui5CustomText {
+      .ui5Custom {
         display: block;
         font-size: 0.75rem;
         opacity: 0.9;
@@ -55,10 +55,17 @@
         text-align: start;
       }
 
+      div[class*="EmploymentListItem_container__"] > ui5-text-xweb-people-profile:not(.ui5Custom),
+      div[class*="FullProfileDetailView_contentWrapper__"] > ui5-text-xweb-people-profile:not(.ui5Custom) {
+        display: none !important;
+      }
+
     `;
 
     document.documentElement.appendChild(style);
   }
+
+
 
   function startKeepSessionAliveWhenAvailable() {
     const checkIntervalMs = 1000;
@@ -125,7 +132,7 @@
     if (!value) return null;
 
     const el = document.createElement("ui5-text-xweb-people-profile");
-    el.classList.add("ui5CustomText");
+    el.classList.add("ui5Custom");
 
     if (label === "Position") {
       const link = createPositionLink(value);
@@ -204,6 +211,7 @@
     removeDirectChildUi5Texts(container);
 
     const rows = [
+      ["Status", profile.isActive],
       [
         "",
         [
@@ -263,6 +271,7 @@
     removeDirectChildUi5Texts(container);
 
     const rows = [
+      ["Status", profile.isActive],
       [
         "",
         [
