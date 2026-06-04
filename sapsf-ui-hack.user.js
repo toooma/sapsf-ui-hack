@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.3.4
+// @version      0.3.5
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -164,6 +164,22 @@
     );
   }
 
+  // function findEmploymentContainer(li) {
+  //   return Array.from(li.querySelectorAll("div")).find(div =>
+  //     Array.from(div.classList).some(cls =>
+  //       cls.startsWith("EmploymentListItem_container__")
+  //     )
+  //   );
+  // }
+
+  // function findFullProfileDetailContainer() {
+  //   return Array.from(document.querySelectorAll("div")).find(div =>
+  //     Array.from(div.classList).some(cls =>
+  //       cls.startsWith("FullProfileDetailView_contentWrapper__")
+  //     )
+  //   );
+  // }
+
   function removeDirectChildUi5Texts(container) {
     if (!container) return false;
 
@@ -220,7 +236,7 @@
       ["Position", profile.custom02],
       ["Department", profile.departmentName],
       ["Entity", profile.custom05],
-      ["User Id", profile.legacyId]
+      ["User Id", profile.legacyId],
       ["", profile.isActive ? "🟢 Active" : "⚫ Inactive"],
     ];
 
@@ -271,7 +287,6 @@
     removeDirectChildUi5Texts(container);
 
     const rows = [
-      ["", profile.isActive ? "🟢 Active" : "⚫ Inactive"],
       [
         "",
         [
@@ -282,7 +297,7 @@
       ["Position", profile.custom02],
       ["Department", profile.departmentName],
       ["Entity", profile.custom05],
-      ["User Id", profile.legacyId]
+      ["User Id", profile.legacyId],
       ["", profile.isActive ? "🟢 Active" : "⚫ Inactive"],
     ];
 
