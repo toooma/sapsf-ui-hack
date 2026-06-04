@@ -3,7 +3,6 @@
 // @namespace    https://github.com/toooma/sapsf-ui-hack
 // @version      0.1.1
 // @description  Adds additional employment information to SAP SuccessFactors People Profile pages.
-// @author       Your Name
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-start
 // @grant        none
@@ -102,7 +101,7 @@
         "",
         [
           profile?.hireDate ? `▶️ Hire: ${profile.hireDate}` : null,
-          profile?.companyExitDate ? `🔴🤘 Exit: ${profile.companyExitDate}` : null
+          profile?.companyExitDate ? `🔴 Exit: ${profile.companyExitDate}` : null
         ].filter(Boolean).join(" ")
       ],
       ["Position", profile.custom02],
