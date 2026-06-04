@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.1.1
-// @description  Adds additional employment information to SAP SuccessFactors People Profile pages.
+// @version      0.1.2
+// @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-start
 // @grant        none
@@ -24,9 +24,55 @@
 
   console.log("🔍 SAP SuccessFactors Profile Enhancer userscript starting...");
 
+  applyUiHacks();
+  startKeepSessionAliveWhenAvailable();
+
   window.addEventListener("load", () => {
     console.log("SAPSF page loaded!");
   });
+
+  function applyUiHacks() {
+    const style = document.createElement("style");
+
+    style.textContent = `
+      .ectTextArea {
+        resize: both !important;
+      }
+    `;
+
+    document.documentElement.appendChild(style);
+  }
+
+  function startKeepSessionAliveWhenAvailable() {
+    const checkIntervalMs = 1000;
+    const keepAliveIntervalMs = 55000;
+
+    const isAvailable = () =>
+      typeof window.SFSessionTimeout !== "undefined" &&
+      typeof window.SFSessionTimeout.extendSession === "function";
+
+    const extendSessionSafely = () => {
+      try {
+        if (!isAvailable()) return;
+
+        console.log("Extending SAPSF session...");
+        window.SFSessionTimeout.extendSession();
+      } catch (err) {
+        console.error("Failed to extend SAPSF session:", err);
+      }
+    };
+
+    const waitTimer = setInterval(() => {
+      if (!isAvailable()) return;
+
+      clearInterval(waitTimer);
+
+      console.log("✅ SFSessionTimeout.extendSession is available. Starting keep-alive.");
+
+      extendSessionSafely();
+      setInterval(extendSessionSafely, keepAliveIntervalMs);
+    }, checkIntervalMs);
+  }
 
   async function fetchJson(url, options = {}) {
     internalFetch = true;
