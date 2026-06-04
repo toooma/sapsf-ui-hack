@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.1.8
+// @version      0.1.9
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-start
@@ -128,6 +128,34 @@
     return el;
   }
 
+  function createUi5Text(label, value) {
+    if (!value) return null;
+
+    const el = document.createElement("ui5-text-xweb-people-profile");
+    el.setAttribute("empty-indicator-mode", "Off");
+
+    if (label === "Position") {
+      const link = createPositionLink(value);
+      if (link) {
+        el.textContent = `${label}: `;
+        el.appendChild(link);
+        el.appendChild(document.createTextNode("\u200e"));
+      } else {
+        el.textContent = `${label}: ${value}\u200e`;
+      }
+    } else {
+      el.textContent = `${label}${label ? ": " : ""}${value}\u200e`;
+    }
+
+    el.style.display = "block";
+    el.style.fontSize = "0.75rem";
+    el.style.opacity = "0.85";
+    el.style.marginTop = "2px";
+    el.style.textAlign = "start";
+
+    return el;
+  }
+
   function findEmploymentContainer(li) {
     return Array.from(li.querySelectorAll("div")).find(div =>
       Array.from(div.classList).some(cls =>
@@ -158,6 +186,27 @@
 
     targetEl.remove();
     return true;
+  }
+
+  function extractBracketCode(value) {
+    return value?.match(/\(([^)]+)\)/)?.[1] || null;
+  }
+
+  function createPositionLink(value) {
+    const code = extractBracketCode(value);
+    if (!code) return null;
+
+    const a = document.createElement("a");
+    a.href = `/xi/ui/ect/pages/positionMgmt/position.xhtml?m=PositionManagement&#t=Position&e=${encodeURIComponent(code)}`;
+    a.textContent = value;
+    // a.target = "_blank";
+    // a.rel = "noopener noreferrer";
+
+    a.style.color = "inherit";
+    a.style.textDecoration = "underline";
+    a.style.cursor = "pointer";
+
+    return a;
   }
 
   function enrichWorkProfileItem(profile) {
