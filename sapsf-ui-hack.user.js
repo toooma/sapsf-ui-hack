@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.3.5
+// @version      0.3.6
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -59,7 +59,7 @@
         display: none !important;
       }
 
-      div[class^="HeaderFieldsDisplay_container__"] {
+      div[class*="HeaderFieldsDisplay_container__"] {
         display: none !important;
       }
 
@@ -163,22 +163,6 @@
       'div[class^="FullProfileDetailView_contentWrapper__"], div[class*=" FullProfileDetailView_contentWrapper__"]'
     );
   }
-
-  // function findEmploymentContainer(li) {
-  //   return Array.from(li.querySelectorAll("div")).find(div =>
-  //     Array.from(div.classList).some(cls =>
-  //       cls.startsWith("EmploymentListItem_container__")
-  //     )
-  //   );
-  // }
-
-  // function findFullProfileDetailContainer() {
-  //   return Array.from(document.querySelectorAll("div")).find(div =>
-  //     Array.from(div.classList).some(cls =>
-  //       cls.startsWith("FullProfileDetailView_contentWrapper__")
-  //     )
-  //   );
-  // }
 
   function removeDirectChildUi5Texts(container) {
     if (!container) return false;
