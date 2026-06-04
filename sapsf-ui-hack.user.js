@@ -102,7 +102,7 @@
         "",
         [
           profile?.hireDate ? `▶️ Hire: ${profile.hireDate}` : null,
-          profile?.companyExitDate ? `🔴 Exit: ${profile.companyExitDate}` : null
+          profile?.companyExitDate ? `🔴🤘 Exit: ${profile.companyExitDate}` : null
         ].filter(Boolean).join(" ")
       ],
       ["Position", profile.custom02],
