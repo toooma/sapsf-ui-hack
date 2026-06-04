@@ -24,14 +24,14 @@
 
   console.log("🔍 SAP SuccessFactors Profile Enhancer userscript starting...");
 
-  applyUiHacks();
+  applyStyleHacks();
   startKeepSessionAliveWhenAvailable();
 
   window.addEventListener("load", () => {
     console.log("SAPSF page loaded!");
   });
 
-  function applyUiHacks() {
+  function applyStyleHacks() {
     const style = document.createElement("style");
 
     style.textContent = `
