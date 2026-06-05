@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.6.8
+// @version      0.6.9
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -36,7 +36,6 @@
 
   const ROUTES = {
     LIVE_PROFILE: "/sf/liveprofile",
-    DOCUMENT_GENERATION: "/xi/ui/documentgeneration/pages/generator.xhtml",
   };
 
   function getCurrentPathname() {
@@ -105,6 +104,8 @@
 
     return input?.url || "";
   }
+
+  const isAfterToday = dateStr => new Date(dateStr) > new Date(new Date().toDateString());
 
   /**************************************************************************
    * 2. Global features, running on every page
@@ -551,9 +552,9 @@
       const el = document.createElement("ui5-text-xweb-people-profile");
       el.classList.add("ui5Custom");
 
-      if (label) {
-        el.append(`${label}: `);
-      }
+      // if (label) {
+      //   el.append(`${label}: `);
+      // }
 
       if (label === "Position") {
         const link = createPositionLink(value);
@@ -598,7 +599,7 @@
     function buildProfileRows(profile) {
       return [
         [
-          "",
+          "Dates",
           [
             profile?.hireDate ? `▶️ Hire: ${profile.hireDate}` : null,
             profile?.companyExitDate ? `🔴 Exit: ${profile.companyExitDate}` : null
@@ -607,10 +608,10 @@
             .join(" ")
         ],
         ["Position", profile.custom02],
-        ["Department", profile.departmentName],
+        ["Unit", profile.departmentName],
         ["Entity", profile.custom05],
         [
-          "",
+          "Ids",
           [
             profile?.personIdExternal ? `PersonId: ${profile.personIdExternal}` : null,
             profile?.legacyId ? `UserId: ${profile.legacyId}` : null
@@ -618,7 +619,7 @@
             .filter(Boolean)
             .join(" ")
         ],
-        ["", profile.isActive ? "🟢 Active" : "⚫ Inactive"]
+        ["Status", profile.isActive ? `🟢 Active` : `⚫ Inactive ${isAfterToday(profile?.hireDate) ? '(Future)' : '(Past)'}`]
       ];
     }
 
@@ -755,19 +756,13 @@
       .json()
       .then(async data => {
         const id = data?.id;
-
         console.log("workforcePersonProfile.id:", id);
-
         if (!id) return;
-
         try {
-          const workforcePersonProfile =
-            await liveProfileEnrichment.getWorkforcePersonProfileDetails(id);
-
+          const workforcePersonProfile = await liveProfileEnrichment.getWorkforcePersonProfileDetails(id);
           for (const wp of workforcePersonProfile.workProfiles ?? []) {
             wp.personIdExternal = workforcePersonProfile?.externalId;
           }
-
           liveProfileEnrichment.enrichWorkProfiles(
             workforcePersonProfile?.workProfiles || []
           );
