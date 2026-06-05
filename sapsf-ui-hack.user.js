@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.4.1
+// @version      0.4.2
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -366,15 +366,9 @@
   console.log("✅ Fetch watcher installed.");
 
 
-  function goToLiveProfileByUserId(userId) {
-    const trimmed = String(userId || "").trim();
-    if (!trimmed) return;
-    window.location.href = `/sf/liveprofile?selected_user=${encodeURIComponent(trimmed)}`;
-  }
-
   function addUserIdSearchCommand() {
     function attachUserIdSearchCommand() {
-      const input = document.getElementById("inner");
+      const input = document.querySelector("xweb-shellbar").shadowRoot.querySelector("#search").shadowRoot.querySelector("#inner");
       if (!input) return false;
 
       input.addEventListener(
