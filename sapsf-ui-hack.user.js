@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.3.7
+// @version      0.3.8
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -14,23 +14,18 @@
 (() => {
   "use strict";
 
-  const targetRegex =
-    /\/rest\/workforce\/v1\/workforcePersonProfiles\//;
-
-  const previousFetch = window.fetch.bind(window);
-  let internalFetch = false;
-
-  const ENRICHED_ATTR = "data-work-profile-enriched";
-  const SELECTED_ENRICHED_ATTR = "data-selected-work-profile-enriched-id";
-
   console.log("🔍 SAP SuccessFactors UI Hack userscript starting...");
 
   applyStyleHacks();
   startKeepSessionAliveWhenAvailable();
 
-  window.addEventListener("load", () => {
-    console.log("SAPSF page loaded!");
-  });
+  const previousFetch = window.fetch.bind(window);
+
+  const targetRegex =
+    /\/rest\/workforce\/v1\/workforcePersonProfiles\//;
+
+  const ENRICHED_ATTR = "data-work-profile-enriched";
+  const SELECTED_ENRICHED_ATTR = "data-selected-work-profile-enriched-id";
 
   function applyStyleHacks() {
     const style = document.createElement("style");
@@ -102,34 +97,48 @@
   }
 
   async function fetchJson(url, options = {}) {
-    internalFetch = true;
+    const res = await previousFetch(url, {
+      method: "GET",
+      mode: "cors",
+      credentials: "include",
+      ...options
+    });
 
+    const contentType = res.headers.get("content-type") || "";
+    const isJson = contentType.includes("application/json");
+
+    if (!res.ok) {
+      const errorBody = isJson
+        ? await res.json().catch(() => null)
+        : await res.text().catch(() => "");
+
+      throw new Error(
+        `Request failed: ${res.status} ${res.statusText} ${url}\n${JSON.stringify(errorBody, null, 2)}`
+      );
+    }
+
+    return isJson ? res.json() : res.text();
+  }
+
+
+  const profileDetailsCache = new Map();
+
+  async function getWorkforcePersonProfileDetails(id) {
+    if (profileDetailsCache.has(id)) {
+      return profileDetailsCache.get(id);
+    }
+    const promise = fetchJson(
+      `/rest/workforce/v1/workforcePersonProfiles/${id}?$expand=workProfiles($select=id,displayTitle,legacyId,displayName,departmentName,departmentId,locationName,locationId,isPrimary,assignmentTag,isActive,workerType,timeZone,hireDate,serviceDate,companyExitDate,custom02,custom05,hrManagerId)&$select=id,personId,displayName,internalId,externalId,email,dateOfBirth`
+    );
+    profileDetailsCache.set(id, promise);
     try {
-      const res = await window.fetch(url, {
-        method: "GET",
-        mode: "cors",
-        credentials: "include",
-        ...options
-      });
-
-      const contentType = res.headers.get("content-type") || "";
-      const isJson = contentType.includes("application/json");
-
-      if (!res.ok) {
-        const errorBody = isJson
-          ? await res.json().catch(() => null)
-          : await res.text().catch(() => "");
-
-        throw new Error(
-          `Request failed: ${res.status} ${res.statusText} ${url}\n${JSON.stringify(errorBody, null, 2)}`
-        );
-      }
-
-      return isJson ? res.json() : res.text();
-    } finally {
-      internalFetch = false;
+      return await promise;
+    } catch (err) {
+      profileDetailsCache.delete(id);
+      throw err;
     }
   }
+
 
   function createUi5Text(label, value) {
     if (!value) return null;
@@ -137,20 +146,20 @@
     const el = document.createElement("ui5-text-xweb-people-profile");
     el.classList.add("ui5Custom");
 
+    if (label) {
+      el.append(`${label}: `);
+    }
+
     if (label === "Position") {
       const link = createPositionLink(value);
-      if (link) {
-        el.textContent = `${label}: `;
-        el.appendChild(link);
-      } else {
-        el.textContent = `${label}: ${value}`;
-      }
+      el.append(link || value);
     } else {
-      el.textContent = `${label}${label ? ": " : ""}${value}`;
+      el.append(value);
     }
 
     return el;
   }
+
 
   function findEmploymentContainer(li) {
     return li.querySelector(
@@ -162,18 +171,6 @@
     return document.querySelector(
       'div[class^="FullProfileDetailView_contentWrapper__"], div[class*=" FullProfileDetailView_contentWrapper__"]'
     );
-  }
-
-  function removeDirectChildUi5Texts(container) {
-    if (!container) return false;
-
-    const textEls = Array.from(container.children).filter(
-      child => child.matches?.("ui5-text-xweb-people-profile")
-    );
-
-    textEls.forEach(el => el.remove());
-
-    return textEls.length > 0;
   }
 
   function extractBracketCode(value) {
@@ -193,6 +190,42 @@
     return a;
   }
 
+  function buildProfileRows(profile) {
+    return [
+      [
+        "",
+        [
+          profile?.hireDate ? `▶️ Hire: ${profile.hireDate}` : null,
+          profile?.companyExitDate ? `🔴 Exit: ${profile.companyExitDate}` : null
+        ].filter(Boolean).join(" ")
+      ],
+      ["Position", profile.custom02],
+      ["Department", profile.departmentName],
+      ["Entity", profile.custom05],
+      [
+        "",
+        [
+          profile?.personIdExternal ? `PersonId: ${profile.personIdExternal}` : null,
+          profile?.legacyId ? `UserId: ${profile.legacyId}` : null
+        ].filter(Boolean).join(" ")
+      ],
+      ["", profile.isActive ? "🟢 Active" : "⚫ Inactive"]
+    ];
+  }
+
+  function renderProfileRows(container, profile) {
+    if (!container || !profile) return false;
+
+    for (const [label, value] of buildProfileRows(profile)) {
+      const textEl = createUi5Text(label, value);
+      if (textEl) container.appendChild(textEl);
+    }
+
+    return true;
+  }
+
+
+
   function enrichWorkProfileItem(profile) {
     if (!profile?.id) return false;
 
@@ -207,27 +240,7 @@
     const container = findEmploymentContainer(li);
     if (!container) return false;
 
-    removeDirectChildUi5Texts(container);
-
-    const rows = [
-      [
-        "",
-        [
-          profile?.hireDate ? `▶️ Hire: ${profile.hireDate}` : null,
-          profile?.companyExitDate ? `🔴 Exit: ${profile.companyExitDate}` : null
-        ].filter(Boolean).join(" ")
-      ],
-      ["Position", profile.custom02],
-      ["Department", profile.departmentName],
-      ["Entity", profile.custom05],
-      ["UserId", profile.legacyId],
-      ["", profile.isActive ? "🟢 Active" : "⚫ Inactive"],
-    ];
-
-    for (const [label, value] of rows) {
-      const textEl = createUi5Text(label, value);
-      if (textEl) container.appendChild(textEl);
-    }
+    renderProfileRows(container, profile);
 
     li.setAttribute(ENRICHED_ATTR, "true");
 
@@ -268,27 +281,7 @@
 
     if (!container) return false;
 
-    removeDirectChildUi5Texts(container);
-
-    const rows = [
-      [
-        "",
-        [
-          profile?.hireDate ? `▶️ Hire: ${profile.hireDate}` : null,
-          profile?.companyExitDate ? `🔴 Exit: ${profile.companyExitDate}` : null
-        ].filter(Boolean).join(" ")
-      ],
-      ["Position", profile.custom02],
-      ["Department", profile.departmentName],
-      ["Entity", profile.custom05],
-      ["UserId", profile.legacyId],
-      ["", profile.isActive ? "🟢 Active" : "⚫ Inactive"],
-    ];
-
-    for (const [label, value] of rows) {
-      const textEl = createUi5Text(label, value);
-      if (textEl) container.appendChild(textEl);
-    }
+    renderProfileRows(container, profile);
 
     enrichmentMarkerEl.setAttribute(SELECTED_ENRICHED_ATTR, profile.id);
 
@@ -335,8 +328,6 @@
   window.fetch = async function (...args) {
     const response = await previousFetch(...args);
 
-    if (internalFetch) return response;
-
     try {
       const url = typeof args[0] === "string" ? args[0] : args[0]?.url;
 
@@ -352,12 +343,11 @@
             if (!id) return;
 
             try {
-              const workforcePersonProfile = await fetchJson(
-                `/rest/workforce/v1/workforcePersonProfiles/${id}?$expand=workProfiles($select=id,displayTitle,legacyId,displayName,departmentName,departmentId,locationName,locationId,isPrimary,assignmentTag,isActive,workerType,timeZone,hireDate,serviceDate,companyExitDate,custom02,custom05,hrManagerId)&$select=id,personId,displayName,internalId,externalId,email,dateOfBirth`
-              );
-
-              console.log("workforcePersonProfile details:", workforcePersonProfile);
-
+              const workforcePersonProfile = await getWorkforcePersonProfileDetails(id);
+              // console.log("workforcePersonProfile details:", workforcePersonProfile);
+              for (const wp of workforcePersonProfile.workProfiles ?? []) {
+                wp.personIdExternal = workforcePersonProfile?.externalId;
+              }
               enrichWorkProfiles(workforcePersonProfile?.workProfiles || []);
             } catch (err) {
               console.error("Failed to fetch workforcePersonProfile details:", err);
@@ -373,6 +363,7 @@
 
     return response;
   };
-
   console.log("✅ Fetch watcher installed.");
+
+
 })();
