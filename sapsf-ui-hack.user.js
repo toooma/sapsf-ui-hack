@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.4.2
+// @version      0.4.4
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -367,8 +367,17 @@
 
 
   function addUserIdSearchCommand() {
+    function getSearchInput() {
+      return document
+        .querySelector("xweb-shellbar")
+        ?.shadowRoot
+        ?.querySelector("#search")
+        ?.shadowRoot
+        ?.querySelector("#inner");
+    }
+
     function attachUserIdSearchCommand() {
-      const input = document.querySelector("xweb-shellbar").shadowRoot.querySelector("#search").shadowRoot.querySelector("#inner");
+      const input = getSearchInput();
       if (!input) return false;
 
       input.addEventListener(
@@ -381,6 +390,7 @@
 
           event.preventDefault();
           event.stopPropagation();
+          event.stopImmediatePropagation();
 
           const userId = value.slice(2).trim();
           if (!userId) return;
@@ -407,6 +417,7 @@
       subtree: true
     });
   }
+
   addUserIdSearchCommand();
 
 
