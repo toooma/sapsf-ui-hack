@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.4.7
+// @version      0.4.8
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
-// @run-at       document-start
+// @run-at       document-end
 // @icon         https://img.icons8.com/ios-filled/100/circled-s.png
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/toooma/sapsf-ui-hack/main/sapsf-ui-hack.user.js
