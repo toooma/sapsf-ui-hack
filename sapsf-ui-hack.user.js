@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.6.4
+// @version      0.6.6
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -20,13 +20,9 @@
    * Structure:
    * 1. Global constants / utilities
    * 2. Global features, running on every page
-   *    - applyStyleHacks
-   *    - startKeepSessionAliveWhenAvailable
-   *    - addUserIdSearchCommand
    * 3. Route-based feature registry
    * 4. Fetch target registry
    * 5. Route-specific modules
-   *    - Live Profile enrichment
    * 6. Bootstrap
    **************************************************************************/
 
@@ -792,11 +788,14 @@
   function initDocumentGenerationUserParam() {
     const params = new URLSearchParams(window.location.search);
     const userId = params.get("userId");
+    const userDisplayName = params.get("userDisplayName");
 
     if (!userId) {
       console.log("ℹ️ Document Generation userId param not present.");
       return;
     }
+    
+    history.replaceState(null, "", location.pathname + location.hash);
 
     const CONTROLLER_GLOBAL_NAME = "__docGenController";
     const USER_INPUT_SELECTOR = 'input[aria-label="User"]';
@@ -838,7 +837,7 @@
     }
 
     function hideUserInputAndDisplayUserId() {
-      const input = document.querySelector(USER_INPUT_SELECTOR);
+      const input = document.querySelector(USER_INPUT_SELECTOR)?.parentElement;
       if (!input) return false;
       input.style.display = "none";
       const parent = input.parentElement;
@@ -846,7 +845,7 @@
       if (!parent.querySelector("[data-sapsf-ui-hack-docgen-user-id]")) {
         const span = document.createElement("span");
         span.dataset.sapsfUiHackDocgenUserId = "true";
-        span.textContent = userId;
+        span.textContent = `${userId} ${userDisplayName}`;
         span.style.userSelect = "text";
         parent.appendChild(span);
       }
