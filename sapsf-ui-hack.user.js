@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.5.1
+// @version      0.5.2
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -545,31 +545,19 @@
 
 
 
-  function exposeController(Ctor) {
+  function exposeController(Ctor, name) {
     if (!Ctor?.prototype?.init || Ctor.prototype.init.__tmPatched) return Ctor;
-
     const originalInit = Ctor.prototype.init;
-
     Ctor.prototype.init = function (...args) {
-      window.__docGenController = this;
+      window[name] = this;
       console.log("[TM] DocGenController instance exposed as window.__docGenController", this);
       return originalInit.apply(this, args);
     };
-
     Ctor.prototype.init.__tmPatched = true;
     return Ctor;
   }
-  Object.defineProperty(window, "DocGenController", {
-    configurable: true,
-    get() {
-      return this.__DocGenController;
-    },
-    set(value) {
-      this.__DocGenController = exposeController(value);
-    }
-  });
   if (window.DocGenController) {
-    window.DocGenController = exposeController(window.DocGenController);
+    window.DocGenController = exposeController(window.DocGenController, "__docGenController");
   }
 
 
