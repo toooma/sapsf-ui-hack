@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.4.5
+// @version      0.4.6
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -367,6 +367,8 @@
 
 
   function addUserIdSearchCommand() {
+    const introOriginals = new WeakMap();
+
     function getSearchParts() {
       const shellbar = document.querySelector("xweb-shellbar");
       const search = shellbar?.shadowRoot?.querySelector("#search");
@@ -374,36 +376,75 @@
 
       return { shellbar, search, input };
     }
+
+    function getIntro(search) {
+      return (
+        search?.shadowRoot?.querySelector("xweb-global-search-intro") ||
+        search?.querySelector?.("xweb-global-search-intro")
+      );
+    }
+
+    function ensureIntroEnhanced(intro) {
+      if (!intro || introOriginals.has(intro)) return;
+
+      const originalNoSearchResultMsg =
+        intro.getAttribute("no-search-result-msg") ||
+        "No matching results. Try a different search.";
+
+      const originalMarkup = intro.getAttribute("markup") || "";
+
+      introOriginals.set(intro, {
+        noSearchResultMsg: originalNoSearchResultMsg,
+        markup: originalMarkup
+      });
+
+      const userIdSearchOption = `
+        <li data-user-id-search-option="true">
+          <span class="searchItemIcon globalIconFont1Support">
+            <ui5-icon-sf-header class="icon" name="person-placeholder" mode="Image"></ui5-icon-sf-header>
+          </span>
+          <span class="searchItemText">User ID, using “u:”, for example “u:12345”</span>
+        </li>
+      `;
+
+      if (!originalMarkup.includes("data-user-id-search-option")) {
+        const enhancedMarkup = originalMarkup.includes("</ul>")
+          ? originalMarkup.replace("</ul>", `${userIdSearchOption}</ul>`)
+          : `${originalMarkup}${userIdSearchOption}`;
+
+        intro.setAttribute("markup", enhancedMarkup);
+      }
+    }
+
     function updateUserIdHint(input) {
       const value = input.value.trim();
       const isUserIdCommand = value.toLowerCase().startsWith("u:");
 
       const { search } = getSearchParts();
-      if (!search) return;
-
-      const intro =
-        search.shadowRoot?.querySelector("xweb-global-search-intro") ||
-        search.querySelector?.("xweb-global-search-intro");
-
+      const intro = getIntro(search);
       if (!intro) return;
 
-      if (isUserIdCommand) {
-        intro.setAttribute(
-          "no-search-result-msg",
-          "Navigating by User ID.."
-        );
-        intro.setAttribute("no-search-result", "true");
-      } else {
-        intro.setAttribute(
-          "no-search-result-msg",
-          "No matching results. Try a different search."
-        );
-      }
+      ensureIntroEnhanced(intro);
+
+      const original = introOriginals.get(intro);
+
+      intro.setAttribute(
+        "no-search-result-msg",
+        isUserIdCommand
+          ? "Enter the User ID, then press Enter."
+          : original.noSearchResultMsg
+      );
     }
 
     function attachUserIdSearchCommand() {
-      const { input } = getSearchParts();
+      const { input, search } = getSearchParts();
       if (!input) return false;
+
+      const intro = getIntro(search);
+      if (intro) ensureIntroEnhanced(intro);
+
+      if (input.dataset.userIdSearchCommandAttached === "true") return true;
+      input.dataset.userIdSearchCommandAttached = "true";
 
       input.addEventListener(
         "input",
