@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.4.8
+// @version      0.5.1
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -514,50 +514,63 @@
   inject(function () {
     function patchController(Controller) {
       if (!Controller?.prototype?.init) return Controller;
-
       if (Controller.prototype.init.__patchedByTampermonkey) {
         return Controller;
       }
-
       const oldInit = Controller.prototype.init;
-
       Controller.prototype.init = function (...args) {
         window.__docGenController = this;
         console.log("[TM] Captured DocGenController instance:", this);
-
         return oldInit.apply(this, args);
       };
-
       Controller.prototype.init.__patchedByTampermonkey = true;
-
       console.log("[TM] DocGenController.prototype.init patched");
-
       return Controller;
     }
-
     if (window.DocGenController) {
       window.DocGenController = patchController(window.DocGenController);
       return;
     }
-
     let realDocGenController;
-
     Object.defineProperty(window, "DocGenController", {
       configurable: true,
-
       get() {
         return realDocGenController;
       },
-
       set(value) {
         realDocGenController = patchController(value);
       }
     });
-
-    console.log("[TM] Waiting for window.DocGenController...");
   });
 
 
+
+  function exposeController(Ctor) {
+    if (!Ctor?.prototype?.init || Ctor.prototype.init.__tmPatched) return Ctor;
+
+    const originalInit = Ctor.prototype.init;
+
+    Ctor.prototype.init = function (...args) {
+      window.__docGenController = this;
+      console.log("[TM] DocGenController instance exposed as window.__docGenController", this);
+      return originalInit.apply(this, args);
+    };
+
+    Ctor.prototype.init.__tmPatched = true;
+    return Ctor;
+  }
+  Object.defineProperty(window, "DocGenController", {
+    configurable: true,
+    get() {
+      return this.__DocGenController;
+    },
+    set(value) {
+      this.__DocGenController = exposeController(value);
+    }
+  });
+  if (window.DocGenController) {
+    window.DocGenController = exposeController(window.DocGenController);
+  }
 
 
 })();
