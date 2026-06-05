@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.6.6
+// @version      0.6.7
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -831,7 +831,7 @@
       const form = controller._viewPanel.getForm();
       const userField = form?.getFieldByMetaId?.("user");
       if (!userField) return false;
-      userField._value = [userId];
+      userField._value = userId;
       console.log("✅ Document Generation user value set from URL param:", userId);
       return true;
     }
@@ -845,8 +845,9 @@
       if (!parent.querySelector("[data-sapsf-ui-hack-docgen-user-id]")) {
         const span = document.createElement("span");
         span.dataset.sapsfUiHackDocgenUserId = "true";
-        span.textContent = `${userId} ${userDisplayName}`;
+        span.textContent = `${userId} ${decodeURIComponent(userDisplayName)}`;
         span.style.userSelect = "text";
+        span.style.fontWeight = "bold";
         parent.appendChild(span);
       }
       console.log("✅ Document Generation user input hidden and userId displayed.");
