@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.4.4
+// @version      0.4.5
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -367,18 +367,51 @@
 
 
   function addUserIdSearchCommand() {
-    function getSearchInput() {
-      return document
-        .querySelector("xweb-shellbar")
-        ?.shadowRoot
-        ?.querySelector("#search")
-        ?.shadowRoot
-        ?.querySelector("#inner");
+    function getSearchParts() {
+      const shellbar = document.querySelector("xweb-shellbar");
+      const search = shellbar?.shadowRoot?.querySelector("#search");
+      const input = search?.shadowRoot?.querySelector("#inner");
+
+      return { shellbar, search, input };
+    }
+    function updateUserIdHint(input) {
+      const value = input.value.trim();
+      const isUserIdCommand = value.toLowerCase().startsWith("u:");
+
+      const { search } = getSearchParts();
+      if (!search) return;
+
+      const intro =
+        search.shadowRoot?.querySelector("xweb-global-search-intro") ||
+        search.querySelector?.("xweb-global-search-intro");
+
+      if (!intro) return;
+
+      if (isUserIdCommand) {
+        intro.setAttribute(
+          "no-search-result-msg",
+          "Navigating by User ID.."
+        );
+        intro.setAttribute("no-search-result", "true");
+      } else {
+        intro.setAttribute(
+          "no-search-result-msg",
+          "No matching results. Try a different search."
+        );
+      }
     }
 
     function attachUserIdSearchCommand() {
-      const input = getSearchInput();
+      const { input } = getSearchParts();
       if (!input) return false;
+
+      input.addEventListener(
+        "input",
+        () => {
+          updateUserIdHint(input);
+        },
+        true
+      );
 
       input.addEventListener(
         "keydown",
