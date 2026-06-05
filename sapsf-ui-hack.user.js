@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.7.5
+// @version      0.7.6
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -635,24 +635,17 @@
 
     function enrichWorkProfileItem(profile) {
       if (!profile?.id) return false;
-
       const li = document.querySelector(
         `ui5-li-custom-xweb-people-profile[id="${CSS.escape(profile.id)}"]`
       );
-
       if (!li) return false;
-
+      li.parentElement?.append(li);
       if (li.getAttribute(ENRICHED_ATTR) === "true") return true;
-
       const container = findEmploymentContainer(li);
       if (!container) return false;
-
       renderProfileRows(container, profile);
-
       li.setAttribute(ENRICHED_ATTR, "true");
-
       console.log("✅ Enriched work profile item:", profile.id);
-
       return true;
     }
 
