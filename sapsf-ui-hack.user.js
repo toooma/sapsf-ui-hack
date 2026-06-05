@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.4.0
+// @version      0.4.1
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -372,35 +372,48 @@
     window.location.href = `/sf/liveprofile?selected_user=${encodeURIComponent(trimmed)}`;
   }
 
-  function attachUserIdCommand() {
-    const input = document.getElementById("inner");
-    if (!input || input.dataset.userIdCommandAttached === "true") {
-      return false;
+  function addUserIdSearchCommand() {
+    function attachUserIdSearchCommand() {
+      const input = document.getElementById("inner");
+      if (!input) return false;
+
+      input.addEventListener(
+        "keydown",
+        event => {
+          if (event.key !== "Enter") return;
+
+          const value = input.value.trim();
+          if (!value.toLowerCase().startsWith("u:")) return;
+
+          event.preventDefault();
+          event.stopPropagation();
+
+          const userId = value.slice(2).trim();
+          if (!userId) return;
+
+          window.location.href =
+            `/sf/liveprofile?selected_user=${encodeURIComponent(userId)}`;
+        },
+        true
+      );
+
+      return true;
     }
-    input.dataset.userIdCommandAttached = "true";
-    input.addEventListener(
-      "keydown",
-      event => {
-        if (event.key !== "Enter") return;
-        const value = input.value.trim();
-        if (!value.toLowerCase().startsWith("u:")) return;
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        const userId = value.slice(2).trim();
-        goToLiveProfileByUserId(userId);
-      },
-      true
-    );
-    return true;
+
+    if (attachUserIdSearchCommand()) return;
+
+    const observer = new MutationObserver(() => {
+      if (attachUserIdSearchCommand()) {
+        observer.disconnect();
+      }
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
   }
-  const observer = new MutationObserver(() => {
-    attachUserIdCommand();
-  });
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true
-  });
+  addUserIdSearchCommand();
 
 
 })();
