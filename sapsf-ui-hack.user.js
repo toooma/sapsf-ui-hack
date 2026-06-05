@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.6.2
+// @version      0.6.4
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -39,7 +39,8 @@
   const originalFetch = window.fetch.bind(window);
 
   const ROUTES = {
-    LIVE_PROFILE: "/sf/liveprofile"
+    LIVE_PROFILE: "/sf/liveprofile",
+    DOCUMENT_GENERATION: "/xi/ui/documentgeneration/pages/generator.xhtml",
   };
 
   function getCurrentPathname() {
@@ -195,11 +196,11 @@
       },
       {
         prefix: "p:",
-        label: "Position, using “p:”, for example “p:50001234”",
+        label: "Position, using “p:”, for example “p:POS123456”",
         icon: "org-chart",
         hint: "Enter the Position code, then press Enter.",
         buildUrl: value =>
-          `/xi/ui/ect/pages/positionMgmt/position.xhtml?m=PositionManagement&#t=Position&e=${encodeURIComponent(value)}`
+          `/xi/ui/ect/pages/positionMgmt/position.xhtml?#t=Position&m=PositionManagement&u=position&e=${encodeURIComponent(value)}`
       }
     ];
 
@@ -415,7 +416,12 @@
       id: "liveProfileEnrichment",
       route: ROUTES.LIVE_PROFILE,
       init: initLiveProfileEnrichment
-    }
+    },
+    {
+      id: "documentGenerationUserParam",
+      route: ROUTES.DOCUMENT_GENERATION,
+      init: initDocumentGenerationUserParam
+    },
 
     /*
      * Add future route-based features here:
@@ -783,6 +789,95 @@
       });
   }
 
+  function initDocumentGenerationUserParam() {
+    const params = new URLSearchParams(window.location.search);
+    const userId = params.get("userId");
+
+    if (!userId) {
+      console.log("ℹ️ Document Generation userId param not present.");
+      return;
+    }
+
+    const CONTROLLER_GLOBAL_NAME = "__docGenController";
+    const USER_INPUT_SELECTOR = 'input[aria-label="User"]';
+
+    function exposeController(Ctor, name) {
+      if (!Ctor?.prototype?.init || Ctor.prototype.init.__tmPatched) return Ctor;
+      const originalInit = Ctor.prototype.init;
+      Ctor.prototype.init = function (...args) {
+        window[name] = this;
+        console.log(
+          `⛏️ DocGenController instance exposed as window.${name}`,
+          this
+        );
+        return originalInit.apply(this, args);
+      };
+      Ctor.prototype.init.__tmPatched = true;
+      return Ctor;
+    }
+
+    function patchDocGenControllerWhenAvailable() {
+      if (!window.DocGenController) return false;
+      window.DocGenController = exposeController(
+        window.DocGenController,
+        CONTROLLER_GLOBAL_NAME
+      );
+      console.log("✅ DocGenController patched.");
+      return true;
+    }
+
+    function setControllerUserValue() {
+      const controller = window[CONTROLLER_GLOBAL_NAME];
+      if (!controller?._viewPanel?.getForm) return false;
+      const form = controller._viewPanel.getForm();
+      const userField = form?.getFieldByMetaId?.("user");
+      if (!userField) return false;
+      userField._value = [userId];
+      console.log("✅ Document Generation user value set from URL param:", userId);
+      return true;
+    }
+
+    function hideUserInputAndDisplayUserId() {
+      const input = document.querySelector(USER_INPUT_SELECTOR);
+      if (!input) return false;
+      input.style.display = "none";
+      const parent = input.parentElement;
+      if (!parent) return false;
+      if (!parent.querySelector("[data-sapsf-ui-hack-docgen-user-id]")) {
+        const span = document.createElement("span");
+        span.dataset.sapsfUiHackDocgenUserId = "true";
+        span.textContent = userId;
+        span.style.userSelect = "text";
+        parent.appendChild(span);
+      }
+      console.log("✅ Document Generation user input hidden and userId displayed.");
+      return true;
+    }
+
+    function tryApplyUserParamEnhancement() {
+      patchDocGenControllerWhenAvailable();
+      const userValueSet = setControllerUserValue();
+      const userInputHandled = hideUserInputAndDisplayUserId();
+      return userValueSet && userInputHandled;
+    }
+
+    if (tryApplyUserParamEnhancement()) return;
+
+    const observer = new MutationObserver(() => {
+      if (tryApplyUserParamEnhancement()) {
+        observer.disconnect();
+      }
+    });
+
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+
+    console.log("✅ Document Generation userId param module initialized.");
+  }
+
+
   /**************************************************************************
    * 6. Bootstrap
    **************************************************************************/
@@ -799,4 +894,5 @@
   }
 
   bootstrap();
+
 })();
