@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.3.8
+// @version      0.3.9
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -364,6 +364,37 @@
     return response;
   };
   console.log("✅ Fetch watcher installed.");
+
+
+  function goToLiveProfileByUserId(userId) {
+    const trimmed = String(userId || "").trim();
+    if (!trimmed) return;
+    window.location.href = `/sf/liveprofile?selected_user=${encodeURIComponent(trimmed)}`;
+  }
+
+  function attachUserIdCommand() {
+    const input = document.getElementById("inner");
+    if (!input || input.dataset.userIdCommandAttached === "true") {
+      return false;
+    }
+    input.dataset.userIdCommandAttached = "true";
+    input.addEventListener(
+      "keydown",
+      event => {
+        if (event.key !== "Enter") return;
+        const value = input.value.trim();
+        if (!value.toLowerCase().startsWith("u:")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        const userId = value.slice(2).trim();
+        goToLiveProfileByUserId(userId);
+      },
+      true
+    );
+    return true;
+  }
+  attachUserIdCommand();
 
 
 })();
