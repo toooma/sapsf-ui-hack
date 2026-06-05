@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.6.0
+// @version      0.6.1
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -199,7 +199,59 @@
       );
     }
 
+    function isIntroMarkupReady(intro) {
+      const markup = intro?.getAttribute("markup") || "";
+
+      return (
+        markup.includes("<ul") ||
+        markup.includes("</ul>") ||
+        markup.includes("searchItemText")
+      );
+    }
+
     function ensureIntroEnhanced(intro) {
+      if (!intro || introOriginals.has(intro)) return;
+
+      if (!isIntroMarkupReady(intro)) {
+        waitForIntroMarkupThenEnhance(intro);
+        return;
+      }
+
+      enhanceIntroNow(intro);
+    }
+
+    function waitForIntroMarkupThenEnhance(intro) {
+      if (!intro || intro.dataset.userIdIntroMarkupObserverAttached === "true") {
+        return;
+      }
+
+      intro.dataset.userIdIntroMarkupObserverAttached = "true";
+
+      const observer = new MutationObserver(() => {
+        if (!isIntroMarkupReady(intro)) return;
+
+        observer.disconnect();
+        delete intro.dataset.userIdIntroMarkupObserverAttached;
+
+        enhanceIntroNow(intro);
+      });
+
+      observer.observe(intro, {
+        attributes: true,
+        attributeFilter: ["markup", "no-search-result-msg"]
+      });
+
+      setTimeout(() => {
+        if (!introOriginals.has(intro) && isIntroMarkupReady(intro)) {
+          observer.disconnect();
+          delete intro.dataset.userIdIntroMarkupObserverAttached;
+
+          enhanceIntroNow(intro);
+        }
+      }, 500);
+    }
+
+    function enhanceIntroNow(intro) {
       if (!intro || introOriginals.has(intro)) return;
 
       const originalNoSearchResultMsg =
@@ -229,6 +281,8 @@
 
         intro.setAttribute("markup", enhancedMarkup);
       }
+
+      console.log("✅ User ID search intro enhanced.");
     }
 
     function updateUserIdHint(input) {
@@ -247,7 +301,7 @@
         "no-search-result-msg",
         isUserIdCommand
           ? "Enter the User ID, then press Enter."
-          : original.noSearchResultMsg
+          : original?.noSearchResultMsg || "No matching results. Try a different search."
       );
     }
 
@@ -602,13 +656,18 @@
 
     function enrichWorkProfiles(workProfiles = []) {
       let remaining = [...workProfiles];
+      let selectedDone = false;
+
+      const shouldStopObserving = () =>
+        remaining.length === 0 ||
+        selectedDone ||
+        workProfiles.length === 1;
 
       const tryEnrich = () => {
         remaining = remaining.filter(profile => !enrichWorkProfileItem(profile));
+        selectedDone = enrichSelectedEmployment(workProfiles) || selectedDone;
 
-        const selectedDone = enrichSelectedEmployment(workProfiles);
-
-        if (!remaining.length || selectedDone) {
+        if (shouldStopObserving()) {
           observer.disconnect();
           console.log("✅ All available work profile items enriched.");
         }
@@ -626,7 +685,12 @@
       setTimeout(() => {
         observer.disconnect();
 
-        if (remaining.length) {
+        const shouldWarn =
+          remaining.length > 0 &&
+          !selectedDone &&
+          workProfiles.length !== 1;
+
+        if (shouldWarn) {
           console.warn(
             "⚠️ Some work profile items were not found in DOM:",
             remaining.map(p => p.id)
