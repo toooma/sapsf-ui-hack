@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.6.1
+// @version      0.6.2
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -181,8 +181,27 @@
     }, checkIntervalMs);
   }
 
-  function addUserIdSearchCommand() {
+  function addGlobalSearchCommands() {
     const introOriginals = new WeakMap();
+
+    const searchCommands = [
+      {
+        prefix: "u:",
+        label: "User ID, using “u:”, for example “u:123456”",
+        icon: "person-placeholder",
+        hint: "Enter the User ID, then press Enter.",
+        buildUrl: value =>
+          `/sf/liveprofile?selected_user=${encodeURIComponent(value)}`
+      },
+      {
+        prefix: "p:",
+        label: "Position, using “p:”, for example “p:50001234”",
+        icon: "org-chart",
+        hint: "Enter the Position code, then press Enter.",
+        buildUrl: value =>
+          `/xi/ui/ect/pages/positionMgmt/position.xhtml?m=PositionManagement&#t=Position&e=${encodeURIComponent(value)}`
+      }
+    ];
 
     function getSearchParts() {
       const shellbar = document.querySelector("xweb-shellbar");
@@ -221,17 +240,17 @@
     }
 
     function waitForIntroMarkupThenEnhance(intro) {
-      if (!intro || intro.dataset.userIdIntroMarkupObserverAttached === "true") {
+      if (!intro || intro.dataset.globalSearchCommandsIntroMarkupObserverAttached === "true") {
         return;
       }
 
-      intro.dataset.userIdIntroMarkupObserverAttached = "true";
+      intro.dataset.globalSearchCommandsIntroMarkupObserverAttached = "true";
 
       const observer = new MutationObserver(() => {
         if (!isIntroMarkupReady(intro)) return;
 
         observer.disconnect();
-        delete intro.dataset.userIdIntroMarkupObserverAttached;
+        delete intro.dataset.globalSearchCommandsIntroMarkupObserverAttached;
 
         enhanceIntroNow(intro);
       });
@@ -244,7 +263,7 @@
       setTimeout(() => {
         if (!introOriginals.has(intro) && isIntroMarkupReady(intro)) {
           observer.disconnect();
-          delete intro.dataset.userIdIntroMarkupObserverAttached;
+          delete intro.dataset.globalSearchCommandsIntroMarkupObserverAttached;
 
           enhanceIntroNow(intro);
         }
@@ -265,29 +284,51 @@
         markup: originalMarkup
       });
 
-      const userIdSearchOption = `
-        <li data-user-id-search-option="true">
-          <span class="searchItemIcon globalIconFont1Support">
-            <ui5-icon-sf-header class="icon" name="person-placeholder" mode="Image"></ui5-icon-sf-header>
-          </span>
-          <span class="searchItemText">User ID, using “u:”, for example “u:123456”</span>
-        </li>
-      `;
+      const commandOptionsMarkup = searchCommands
+        .map(command => {
+          const marker = `data-search-command-option="${command.prefix}"`;
 
-      if (!originalMarkup.includes("data-user-id-search-option")) {
-        const enhancedMarkup = originalMarkup.includes("</ul>")
-          ? originalMarkup.replace("</ul>", `${userIdSearchOption}</ul>`)
-          : `${originalMarkup}${userIdSearchOption}`;
+          if (originalMarkup.includes(marker)) {
+            return "";
+          }
 
-        intro.setAttribute("markup", enhancedMarkup);
-      }
+          return `
+            <li ${marker}>
+              <span class="searchItemIcon globalIconFont1Support">
+                <ui5-icon-sf-header class="icon" name="${command.icon}" mode="Image"></ui5-icon-sf-header>
+              </span>
+              <span class="searchItemText">${command.label}</span>
+            </li>
+          `;
+        })
+        .join("");
 
-      console.log("✅ User ID search intro enhanced.");
+      if (!commandOptionsMarkup.trim()) return;
+
+      const enhancedMarkup = originalMarkup.includes("</ul>")
+        ? originalMarkup.replace("</ul>", `${commandOptionsMarkup}</ul>`)
+        : `${originalMarkup}${commandOptionsMarkup}`;
+
+      intro.setAttribute("markup", enhancedMarkup);
+
+      console.log("✅ Global search commands intro enhanced.");
     }
 
-    function updateUserIdHint(input) {
+    function getMatchingCommand(value) {
+      const normalizedValue = value.trim().toLowerCase();
+
+      return searchCommands.find(command =>
+        normalizedValue.startsWith(command.prefix.toLowerCase())
+      );
+    }
+
+    function getCommandValue(value, command) {
+      return value.slice(command.prefix.length).trim();
+    }
+
+    function updateCommandHint(input) {
       const value = input.value.trim();
-      const isUserIdCommand = value.toLowerCase().startsWith("u:");
+      const command = getMatchingCommand(value);
 
       const { search } = getSearchParts();
       const intro = getIntro(search);
@@ -299,26 +340,26 @@
 
       intro.setAttribute(
         "no-search-result-msg",
-        isUserIdCommand
-          ? "Enter the User ID, then press Enter."
+        command
+          ? command.hint
           : original?.noSearchResultMsg || "No matching results. Try a different search."
       );
     }
 
-    function attachUserIdSearchCommand() {
+    function attachGlobalSearchCommands() {
       const { input, search } = getSearchParts();
       if (!input) return false;
 
       const intro = getIntro(search);
       if (intro) ensureIntroEnhanced(intro);
 
-      if (input.dataset.userIdSearchCommandAttached === "true") return true;
-      input.dataset.userIdSearchCommandAttached = "true";
+      if (input.dataset.globalSearchCommandsAttached === "true") return true;
+      input.dataset.globalSearchCommandsAttached = "true";
 
       input.addEventListener(
         "input",
         () => {
-          updateUserIdHint(input);
+          updateCommandHint(input);
         },
         true
       );
@@ -329,30 +370,31 @@
           if (event.key !== "Enter") return;
 
           const value = input.value.trim();
-          if (!value.toLowerCase().startsWith("u:")) return;
+          const command = getMatchingCommand(value);
+
+          if (!command) return;
 
           event.preventDefault();
           event.stopPropagation();
           event.stopImmediatePropagation();
 
-          const userId = value.slice(2).trim();
-          if (!userId) return;
+          const commandValue = getCommandValue(value, command);
+          if (!commandValue) return;
 
-          window.location.href =
-            `/sf/liveprofile?selected_user=${encodeURIComponent(userId)}`;
+          window.location.href = command.buildUrl(commandValue);
         },
         true
       );
 
-      console.log("✅ User ID search command attached.");
+      console.log("✅ Global search commands attached.");
 
       return true;
     }
 
-    if (attachUserIdSearchCommand()) return;
+    if (attachGlobalSearchCommands()) return;
 
     const observer = new MutationObserver(() => {
-      if (attachUserIdSearchCommand()) {
+      if (attachGlobalSearchCommands()) {
         observer.disconnect();
       }
     });
@@ -362,6 +404,7 @@
       subtree: true
     });
   }
+
 
   /**************************************************************************
    * 3. Route-based feature registry
@@ -747,7 +790,7 @@
   function bootstrap() {
     safeRun("applyStyleHacks", applyStyleHacks);
     safeRun("startKeepSessionAliveWhenAvailable", startKeepSessionAliveWhenAvailable);
-    safeRun("addUserIdSearchCommand", addUserIdSearchCommand);
+    safeRun("addGlobalSearchCommands", addGlobalSearchCommands);
 
     safeRun("runMatchingRouteFeatures", runMatchingRouteFeatures);
     safeRun("installFetchWatcher", installFetchWatcher);
