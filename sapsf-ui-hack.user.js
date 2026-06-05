@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.4.6
+// @version      0.4.7
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
-// @run-at       document-end
+// @run-at       document-start
 // @icon         https://img.icons8.com/ios-filled/100/circled-s.png
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/toooma/sapsf-ui-hack/main/sapsf-ui-hack.user.js
@@ -403,7 +403,7 @@
           <span class="searchItemIcon globalIconFont1Support">
             <ui5-icon-sf-header class="icon" name="person-placeholder" mode="Image"></ui5-icon-sf-header>
           </span>
-          <span class="searchItemText">User ID, using “u:”, for example “u:12345”</span>
+          <span class="searchItemText">User ID, using “u:”, for example “u:123456”</span>
         </li>
       `;
 
@@ -493,6 +493,71 @@
   }
 
   addUserIdSearchCommand();
+
+
+
+
+
+
+
+
+
+
+
+  function inject(fn) {
+    const script = document.createElement("script");
+    script.textContent = `(${fn})();`;
+    document.documentElement.appendChild(script);
+    script.remove();
+  }
+
+  inject(function () {
+    function patchController(Controller) {
+      if (!Controller?.prototype?.init) return Controller;
+
+      if (Controller.prototype.init.__patchedByTampermonkey) {
+        return Controller;
+      }
+
+      const oldInit = Controller.prototype.init;
+
+      Controller.prototype.init = function (...args) {
+        window.__docGenController = this;
+        console.log("[TM] Captured DocGenController instance:", this);
+
+        return oldInit.apply(this, args);
+      };
+
+      Controller.prototype.init.__patchedByTampermonkey = true;
+
+      console.log("[TM] DocGenController.prototype.init patched");
+
+      return Controller;
+    }
+
+    if (window.DocGenController) {
+      window.DocGenController = patchController(window.DocGenController);
+      return;
+    }
+
+    let realDocGenController;
+
+    Object.defineProperty(window, "DocGenController", {
+      configurable: true,
+
+      get() {
+        return realDocGenController;
+      },
+
+      set(value) {
+        realDocGenController = patchController(value);
+      }
+    });
+
+    console.log("[TM] Waiting for window.DocGenController...");
+  });
+
+
 
 
 })();
