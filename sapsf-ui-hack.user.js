@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.7.1
+// @version      0.7.2
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -601,7 +601,7 @@
         [
           "Dates",
           [
-            profile?.hireDate ? `▶️ Hire: ${profile.hireDate}` : null,
+            profile?.hireDate ? `${profile.isActive ? (isAfterToday(profile?.hireDate) ? '🟡' : '🟢') : '⚫'} Hire: ${profile.hireDate}` : null,
             profile?.companyExitDate ? `🔴 Exit: ${profile.companyExitDate}` : null
           ]
             .filter(Boolean)
@@ -619,7 +619,7 @@
             .filter(Boolean)
             .join(" ")
         ],
-        ["Status", profile.isActive ? `🟢 Active` : `${isAfterToday(profile?.hireDate) ? '🟡 Inactive // Future' : '⚫ Inactive // Past'}`]
+        // ["Status", profile.isActive ? `🟢 Active` : `${isAfterToday(profile?.hireDate) ? '🟡 Inactive // Future' : '⚫ Inactive // Past'}`]
       ];
     }
 
