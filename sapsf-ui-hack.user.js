@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.7.7
+// @version      0.7.8
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -622,6 +622,12 @@
       );
     }
 
+    function findUserDisplayNameContainer() {
+      return document.querySelector(
+        'div[class^="UserDisplayName_root__"], div[class*=" UserDisplayName_root__"]'
+      );
+    }
+
     function extractBracketCode(value) {
       return value?.match(/\(([^)]+)\)/)?.[1] || null;
     }
@@ -677,6 +683,52 @@
       return true;
     }
 
+    function appendDocumentGenerationButton(profile) {
+      const userId = profile?.legacyId;
+      if (!userId) return false;
+
+      const container = findUserDisplayNameContainer();
+      if (!container) return false;
+
+      const existing = container.querySelector('[data-sapsf-ui-hack-docgen-button="true"]');
+
+      if (existing) {
+        if (existing.dataset.userId === userId) return true;
+        existing.remove();
+      }
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = "📜";
+      button.title = `Generate document for ${userId}`;
+      button.dataset.sapsfUiHackDocgenButton = "true";
+      button.dataset.userId = userId;
+
+      button.style.marginLeft = "0.5rem";
+      button.style.border = "none";
+      button.style.background = "transparent";
+      button.style.cursor = "pointer";
+      button.style.fontSize = "1.1rem";
+      button.style.lineHeight = "1";
+
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        window.open(
+          `/xi/ui/documentgeneration/pages/generator.xhtml?userId=${encodeURIComponent(userId)}`,
+          "_blank",
+          "noopener,noreferrer"
+        );
+      });
+
+      container.appendChild(button);
+
+      console.log("✅ Document generation button added for userId:", userId);
+
+      return true;
+    }
+
     function enrichWorkProfileItem(profile) {
       if (!profile?.id) return false;
       const li = document.querySelector(
@@ -704,6 +756,8 @@
           : workProfiles.find(p => p?.id === selectedProfileId);
 
       if (!profile) return false;
+
+      appendDocumentGenerationButton(profile);
 
       const selectedEmployment = document.querySelector("#selectedEmployment");
       const fullProfileContainer = findFullProfileDetailContainer();
