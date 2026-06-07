@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.8.1
+// @version      0.8.2
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -908,9 +908,7 @@
       if (!isCheckboxReady(checkbox)) {
         return false;
       }
-      checkbox.checked = true;
-      checkbox.setAttribute("aria-checked", "true");
-      checkbox.value = "true";
+      checkbox.click();
       fireJuicFromAttr(checkbox, "onclick", {
         type: "click",
         target: checkbox,
