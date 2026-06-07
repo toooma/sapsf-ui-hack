@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.7.9
+// @version      0.8.1
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -871,7 +871,8 @@
     const userId = new URLSearchParams(window.location.search).get("userId");
     if (!userId) return;
 
-    const selector = 'input[aria-label="User"]';
+    const userSelector = 'input[aria-label="User"]';
+    const checkboxSelector = 'input[type="checkbox"][aria-checked="false"]';
     const timeoutMs = 15000;
 
     function isJuicReady(input) {
@@ -886,26 +887,63 @@
       );
     }
 
-    function trySetUser() {
-      const input = document.querySelector(selector);
+    function fireJuicFromAttr(el, attr, fallbackEvent) {
+      const code = el?.getAttribute(attr);
+      const match = code && code.match(/juic\.fire$["']([^"']+)["']\s*,\s*["']([^"']+)["']/);
+      if (!match) return false;
+      juic.fire(match[1], match[2], fallbackEvent);
+      return true;
+    }
 
+    function isCheckboxReady(checkbox) {
+      return (
+        checkbox &&
+        typeof window.juic?.fire === "function" &&
+        checkbox.getAttribute("onclick")?.includes("juic.fire")
+      );
+    }
+
+    function tickCheckbox() {
+      const checkbox = document.querySelector(checkboxSelector);
+      if (!isCheckboxReady(checkbox)) {
+        return false;
+      }
+      checkbox.checked = true;
+      checkbox.setAttribute("aria-checked", "true");
+      checkbox.value = "true";
+      fireJuicFromAttr(checkbox, "onclick", {
+        type: "click",
+        target: checkbox,
+        currentTarget: checkbox,
+        preventDefault() {},
+        stopPropagation() {}
+      });
+      console.log("✅ Document Generator checkbox ticked.");
+      return true;
+    }
+
+    function trySetUser() {
+      const input = document.querySelector(userSelector);
       if (!isJuicReady(input)) {
         return false;
       }
-
       const success = juicSetValue(input, `${userId}`);
-
       if (success) {
         console.log("✅ Document Generator user prefilled:", userId);
       }
-
       return success;
     }
 
-    if (trySetUser()) return;
+    function tryInit() {
+      if (!tickCheckbox()) return false;
+      if (!trySetUser()) return false;
+      return true;
+    }
+
+    if (tryInit()) return;
 
     const observer = new MutationObserver(() => {
-      if (trySetUser()) {
+      if (tryInit()) {
         observer.disconnect();
       }
     });
@@ -914,19 +952,29 @@
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["onfocus", "onkeydown", "onkeyup"]
+      attributeFilter: [
+        "onclick",
+        "onfocus",
+        "onkeydown",
+        "onkeyup",
+        "aria-label",
+        "aria-checked"
+      ]
     });
 
     setTimeout(() => {
       observer.disconnect();
-
-      if (!document.querySelector(selector)) {
+      if (!document.querySelector(checkboxSelector)) {
+        console.warn("⚠️ Document Generator checkbox was not found or JUIC click trigger was not ready.");
+      }
+      if (!document.querySelector(userSelector)) {
         console.warn("⚠️ Document Generator User input was not found.");
       } else {
         console.warn("⚠️ Document Generator User input found, but JUIC triggers were not ready.");
       }
     }, timeoutMs);
   }
+
 
 
   /**************************************************************************
