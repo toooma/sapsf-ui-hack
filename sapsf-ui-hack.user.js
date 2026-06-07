@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.7.6
+// @version      0.7.7
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -36,6 +36,7 @@
 
   const ROUTES = {
     LIVE_PROFILE: "/sf/liveprofile",
+    DOCUMENT_GENERATOR: "/xi/ui/documentgeneration/pages/generator.xhtml",
   };
 
   function getCurrentPathname() {
@@ -106,6 +107,44 @@
   }
 
   const isAfterToday = dateStr => new Date(dateStr) > new Date(new Date().toDateString());
+
+  function juicSetValue(input, value, key = value[0] || '') {
+    const el = typeof input === 'string' ? document.querySelector(input) : input;
+    if (!el) return false;
+
+    const fireFromAttr = (attr, fallbackEvent) => {
+      const code = el.getAttribute(attr);
+      const match = code && code.match(/juic\.fire\(["']([^"']+)["']\s*,\s*["']([^"']+)["']/);
+      if (!match) return;
+
+      juic.fire(match[1], match[2], fallbackEvent);
+    };
+
+    const event = type => ({
+      type,
+      key,
+      keyCode: key.charCodeAt(0),
+      which: key.charCodeAt(0),
+      target: el,
+      currentTarget: el,
+      preventDefault() {},
+      stopPropagation() {}
+    });
+
+    el.focus();
+    el.value = value;
+
+    fireFromAttr('onfocus', {
+      type: 'focus',
+      target: el,
+      currentTarget: el
+    });
+
+    fireFromAttr('onkeydown', event('keydown'));
+    fireFromAttr('onkeyup', event('keyup'));
+
+    return true;
+  }
 
   /**************************************************************************
    * 2. Global features, running on every page
@@ -413,6 +452,11 @@
       id: "liveProfileEnrichment",
       route: ROUTES.LIVE_PROFILE,
       init: initLiveProfileEnrichment
+    },
+    {
+      id: "documentGeneratorUserPrefill",
+      route: ROUTES.DOCUMENT_GENERATOR,
+      init: initDocumentGeneratorUserPrefill
     },
 
     /*
@@ -767,6 +811,67 @@
       .catch(err => {
         console.error("Failed to parse WorkProfile response JSON:", err);
       });
+  }
+
+  function initDocumentGeneratorUserPrefill() {
+    const userId = new URLSearchParams(window.location.search).get("userId");
+    if (!userId) return;
+
+    const selector = 'input[aria-label="User"]';
+    const timeoutMs = 15000;
+
+    function isJuicReady(input) {
+      return (
+        input &&
+        typeof window.juic?.fire === "function" &&
+        (
+          input.getAttribute("onfocus")?.includes("juic.fire") ||
+          input.getAttribute("onkeydown")?.includes("juic.fire") ||
+          input.getAttribute("onkeyup")?.includes("juic.fire")
+        )
+      );
+    }
+
+    function trySetUser() {
+      const input = document.querySelector(selector);
+
+      if (!isJuicReady(input)) {
+        return false;
+      }
+
+      const success = juicSetValue(input, `${userId}`);
+
+      if (success) {
+        console.log("✅ Document Generator user prefilled:", userId);
+      }
+
+      return success;
+    }
+
+    if (trySetUser()) return;
+
+    const observer = new MutationObserver(() => {
+      if (trySetUser()) {
+        observer.disconnect();
+      }
+    });
+
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["onfocus", "onkeydown", "onkeyup"]
+    });
+
+    setTimeout(() => {
+      observer.disconnect();
+
+      if (!document.querySelector(selector)) {
+        console.warn("⚠️ Document Generator User input was not found.");
+      } else {
+        console.warn("⚠️ Document Generator User input found, but JUIC triggers were not ready.");
+      }
+    }, timeoutMs);
   }
 
 
