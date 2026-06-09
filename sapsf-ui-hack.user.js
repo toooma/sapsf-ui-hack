@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.8.4
+// @version      0.8.5
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @run-at       document-end
@@ -662,7 +662,7 @@
         [
           "Dates",
           [
-            profile?.hireDate ? `${profile.isActive ? '🟢 Hire' : (isAfterToday(profile?.hireDate) ? '🟡 Future Hire' : '⚫ Hire')}: ${profile.hireDate}` : null,
+            profile?.hireDate ? `${ isAfterToday(profile?.hireDate) ? '🟡 Future Hire' : (profile.isActive ? '🟢 Hire' : '⚫ Hire')}: ${profile.hireDate}` : null,
             profile?.companyExitDate ? `🔴 Exit: ${profile.companyExitDate}` : null
           ]
             .filter(Boolean)
@@ -732,7 +732,18 @@
           );
         });
 
-        container.appendChild(button);
+        const keepButtonLast = () => {
+          if (container.lastElementChild !== button) {
+            container.appendChild(button);
+          }
+        };
+        keepButtonLast();
+        const observer = new MutationObserver(keepButtonLast);
+        observer.observe(container, {
+          childList: true
+        });
+        setTimeout(() => observer.disconnect(), 3000);
+
         console.log("✅ Document generation button added for userId:", userId);
       }
       return true;
