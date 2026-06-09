@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.8.6
+// @version      0.8.7
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -182,11 +182,11 @@
         display: none !important;
       }
 
-      [style*="visibility: hidden"],
-      [style*="visibility:hidden"] {
+      table.dataGridLayout [style*="visibility: hidden"],
+      table.dataGridLayout [style*="visibility:hidden"] {
         display: none !important;
       }
-      .emptyActionItem {
+      table .emptyActionItem {
         display: none !important;
       }
 
