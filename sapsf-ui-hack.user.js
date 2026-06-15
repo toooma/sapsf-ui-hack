@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.9.0
+// @version      0.9.1
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -1007,7 +1007,7 @@
   function initPositionPendingWorkflowLink() {
     const timeoutMs = 10000;
     const workflowUrl =
-      "/odata/v2/restricted/Position?%24format=json&%24expand=wfRequestNav&recordStatus=pending&%24select=code,wfRequestNav%2FwfRequestId";
+      "/odata/v2/restricted/Position?%24format=json&%24expand=wfRequestNav&recordStatus=pending&fromDate=2020-01-01&%24select=code,wfRequestNav%2FwfRequestId";
 
     let pendingPositionWorkflowsPromise = null;
 
