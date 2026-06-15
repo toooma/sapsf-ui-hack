@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.8.9
+// @version      0.9.0
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -1009,6 +1009,8 @@
     const workflowUrl =
       "/odata/v2/restricted/Position?%24format=json&%24expand=wfRequestNav&recordStatus=pending&%24select=code,wfRequestNav%2FwfRequestId";
 
+    let pendingPositionWorkflowsPromise = null;
+
     function findPendingWorkflowAlert() {
       return [...document.querySelectorAll('div[role="alert"]')]
         .find(el => el.innerText?.toLowerCase().includes("pending workflow"));
@@ -1019,10 +1021,12 @@
       return row?.querySelector("td.field_value")?.innerText?.trim() || null;
     }
 
-    async function fetchPendingPositionWorkflows() {
-      const data = await fetchJson(workflowUrl);
-
-      return data?.d?.results || [];
+    function fetchPendingPositionWorkflows() {
+      if (!pendingPositionWorkflowsPromise) {
+        pendingPositionWorkflowsPromise = fetchJson(workflowUrl)
+          .then(data => data?.d?.results || []);
+      }
+      return pendingPositionWorkflowsPromise;
     }
 
     function findWorkflowRequestId(results, positionCode) {
@@ -1055,13 +1059,10 @@
 
     async function tryAppendWorkflowLink() {
       const alertEl = findPendingWorkflowAlert();
-      if (!alertEl) return false;
-
       const positionCode = getPositionCodeFromPage();
-      if (!positionCode) {
-        console.warn("⚠️ Position code not found on page.");
-        return false;
-      }
+
+      // Keep observing until both page elements exist.
+      if (!alertEl || !positionCode) return false;
 
       const results = await fetchPendingPositionWorkflows();
       const wfRequestId = findWorkflowRequestId(results, positionCode);
