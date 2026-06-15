@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.9.3
+// @version      0.9.4
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -1045,7 +1045,7 @@
       const link = document.createElement("a");
       link.dataset.sapsfUiHackWorkflowLink = "true";
       link.href = `/xi/ui/ect/pages/workflowApproval/ectWorkflowApproval.xhtml?workflowRequestId=${encodeURIComponent(wfRequestId)}`;
-      link.textContent = ` Open workflow ${wfRequestId}`;
+      link.textContent = `Open workflow #${wfRequestId}`;
       link.style.marginLeft = "0.5rem";
       link.style.textDecoration = "underline";
       link.style.fontWeight = "bold";
