@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.8.7
+// @version      0.8.8
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -38,6 +38,8 @@
   const ROUTES = {
     LIVE_PROFILE: "/sf/liveprofile",
     DOCUMENT_GENERATOR: "/xi/ui/documentgeneration/pages/generator.xhtml",
+    POSITION: "/xi/ui/ect/pages/positionMgmt/position.xhtml",
+    MANAGE_DATA: "/xi/ui/genericobject/pages/mdf/mdf.xhtml",
   };
 
   function getCurrentPathname() {
@@ -467,6 +469,13 @@
       id: "documentGeneratorUserPrefill",
       route: ROUTES.DOCUMENT_GENERATOR,
       init: initDocumentGeneratorUserPrefill
+    },
+    {
+      id: "positionPendingWorkflowLink",
+      route: location =>
+        location.pathname === (ROUTES.POSITION || ROUTES.MANAGE_DATA) &&
+        new URLSearchParams(location.hash.replace(/^#/, "")).get("t") === "Position",
+      init: initPositionPendingWorkflowLink
     },
 
     /*
@@ -990,6 +999,111 @@
         console.warn("⚠️ Document Generator User input was not found.");
       } else {
         console.warn("⚠️ Document Generator User input found, but JUIC triggers were not ready.");
+      }
+    }, timeoutMs);
+  }
+
+
+  function initPositionPendingWorkflowLink() {
+    const timeoutMs = 5000;
+    const workflowUrl =
+      "/odata/v2/restricted/Position?%24format=json&%24expand=wfRequestNav&recordStatus=pending&%24select=code,wfRequestNav%2FwfRequestId";
+
+    function findPendingWorkflowAlert() {
+      return [...document.querySelectorAll('div[role="alert"]')]
+        .find(el => el.innerText?.toLowerCase().includes("pending workflow"));
+    }
+
+    function getPositionCodeFromPage() {
+      const row = [...document.querySelectorAll('tr[id$="__field_0"]')][0];
+      return row?.querySelector("td.field_value")?.innerText?.trim() || null;
+    }
+
+    async function fetchPendingPositionWorkflows() {
+      const data = await fetchJson(workflowUrl);
+
+      return data?.d?.results || [];
+    }
+
+    function findWorkflowRequestId(results, positionCode) {
+      const position = results.find(item => item?.code === positionCode);
+
+      return position?.wfRequestNav?.results?.[0]?.wfRequestId || null;
+    }
+
+    function appendWorkflowLink(alertEl, wfRequestId) {
+      if (!alertEl || !wfRequestId) return false;
+
+      if (alertEl.querySelector('[data-sapsf-ui-hack-workflow-link="true"]')) {
+        return true;
+      }
+
+      const link = document.createElement("a");
+      link.dataset.sapsfUiHackWorkflowLink = "true";
+      link.href = `/xi/ui/ect/pages/workflowApproval/ectWorkflowApproval.xhtml?workflowRequestId=${encodeURIComponent(wfRequestId)}`;
+      link.textContent = ` Open workflow ${wfRequestId}`;
+      link.style.marginLeft = "0.5rem";
+      link.style.textDecoration = "underline";
+      link.style.fontWeight = "bold";
+
+      alertEl.appendChild(link);
+
+      console.log("✅ Pending workflow link appended:", wfRequestId);
+
+      return true;
+    }
+
+    async function tryAppendWorkflowLink() {
+      const alertEl = findPendingWorkflowAlert();
+      if (!alertEl) return false;
+
+      const positionCode = getPositionCodeFromPage();
+      if (!positionCode) {
+        console.warn("⚠️ Position code not found on page.");
+        return false;
+      }
+
+      const results = await fetchPendingPositionWorkflows();
+      const wfRequestId = findWorkflowRequestId(results, positionCode);
+
+      if (!wfRequestId) {
+        console.warn("⚠️ Pending workflow request not found for position:", positionCode);
+        return false;
+      }
+
+      return appendWorkflowLink(alertEl, wfRequestId);
+    }
+
+    let done = false;
+
+    const observer = new MutationObserver(() => {
+      if (done) return;
+
+      safeRun("positionPendingWorkflowLink observer", async () => {
+        if (await tryAppendWorkflowLink()) {
+          done = true;
+          observer.disconnect();
+        }
+      });
+    });
+
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+
+    safeRun("positionPendingWorkflowLink initial run", async () => {
+      if (await tryAppendWorkflowLink()) {
+        done = true;
+        observer.disconnect();
+      }
+    });
+
+    setTimeout(() => {
+      observer.disconnect();
+
+      if (!done) {
+        console.warn("⚠️ Pending workflow alert not found or workflow link could not be added.");
       }
     }, timeoutMs);
   }
