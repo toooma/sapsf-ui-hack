@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.8.8
+// @version      0.8.9
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -474,7 +474,7 @@
       id: "positionPendingWorkflowLink",
       route: location =>
         location.pathname === (ROUTES.POSITION || ROUTES.MANAGE_DATA) &&
-        new URLSearchParams(location.hash.replace(/^#/, "")).get("t") === "Position",
+        location.hash.includes("t=Position"),
       init: initPositionPendingWorkflowLink
     },
 
@@ -1005,7 +1005,7 @@
 
 
   function initPositionPendingWorkflowLink() {
-    const timeoutMs = 5000;
+    const timeoutMs = 10000;
     const workflowUrl =
       "/odata/v2/restricted/Position?%24format=json&%24expand=wfRequestNav&recordStatus=pending&%24select=code,wfRequestNav%2FwfRequestId";
 
