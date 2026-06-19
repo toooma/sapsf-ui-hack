@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.9.5
+// @version      0.9.6
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -693,14 +693,19 @@
       ];
     }
 
+    function clearCustomProfileRows(container) {
+      container
+        ?.querySelectorAll(":scope > ui5-text-xweb-people-profile.ui5Custom")
+        ?.forEach(el => el.remove());
+    }
+
     function renderProfileRows(container, profile) {
       if (!container || !profile) return false;
-
+      clearCustomProfileRows(container);
       for (const [label, value] of buildProfileRows(profile)) {
         const textEl = createUi5Text(label, value);
         if (textEl) container.appendChild(textEl);
       }
-
       return true;
     }
 
@@ -826,38 +831,57 @@
     function enrichWorkProfiles(workProfiles = []) {
       let remaining = [...workProfiles];
       let selectedDone = false;
+      let scheduled = false;
+      let disconnected = false;
 
-      const shouldStopObserving = () =>
-        remaining.length === 0 ||
-        selectedDone ||
-        workProfiles.length === 1;
+      const observer = new MutationObserver(() => {
+        scheduleTryEnrich();
+      });
 
-      const tryEnrich = () => {
+      function disconnectObserver() {
+        if (disconnected) return;
+        disconnected = true;
+        observer.disconnect();
+      }
+
+      function shouldStopObserving() {
+        return remaining.length === 0 && selectedDone;
+      }
+
+      function scheduleTryEnrich() {
+        if (scheduled || disconnected) return;
+
+        scheduled = true;
+
+        requestAnimationFrame(() => {
+          scheduled = false;
+          tryEnrich();
+        });
+      }
+
+      function tryEnrich() {
+        if (disconnected) return;
+
         remaining = remaining.filter(profile => !enrichWorkProfileItem(profile));
         selectedDone = enrichSelectedEmployment(workProfiles) || selectedDone;
 
         if (shouldStopObserving()) {
-          observer.disconnect();
+          disconnectObserver();
           console.log("✅ All available work profile items enriched.");
         }
-      };
-
-      const observer = new MutationObserver(tryEnrich);
+      }
 
       observer.observe(document.documentElement, {
         childList: true,
         subtree: true
       });
 
-      tryEnrich();
+      scheduleTryEnrich();
 
       setTimeout(() => {
-        observer.disconnect();
+        disconnectObserver();
 
-        const shouldWarn =
-          remaining.length > 0 &&
-          !selectedDone &&
-          workProfiles.length !== 1;
+        const shouldWarn = remaining.length > 0 && !selectedDone;
 
         if (shouldWarn) {
           console.warn(
@@ -871,6 +895,8 @@
     console.log("✅ Live Profile enrichment module initialized.");
   }
 
+  let liveProfileEnrichmentRunId = 0;
+
   function handleLiveProfileWorkforcePersonProfileFetch({ response }) {
     const liveProfileEnrichment = window.sapSfUiHackLiveProfileEnrichment;
 
@@ -879,6 +905,8 @@
       return;
     }
 
+    const runId = ++liveProfileEnrichmentRunId;
+
     response
       .clone()
       .json()
@@ -886,15 +914,27 @@
         const id = data?.id;
         console.log("workforcePersonProfile.id:", id);
         if (!id) return;
+
         try {
-          const workforcePersonProfile = await liveProfileEnrichment.getWorkforcePersonProfileDetails(id);
+          const workforcePersonProfile =
+            await liveProfileEnrichment.getWorkforcePersonProfileDetails(id);
+
+          // Ignore stale fetch results.
+          if (runId !== liveProfileEnrichmentRunId) {
+            console.log("Ignoring stale live profile enrichment result:", id);
+            return;
+          }
+
           workforcePersonProfile.workProfiles = (workforcePersonProfile.workProfiles ?? [])
-            .sort((a, b) => (b.hireDate ?? '').localeCompare(a.hireDate ?? ''));
+            .sort((a, b) => (b.hireDate ?? "").localeCompare(a.hireDate ?? ""));
+
           for (const wp of workforcePersonProfile.workProfiles ?? []) {
             wp.personIdExternal = workforcePersonProfile?.externalId;
           }
+
           liveProfileEnrichment.enrichWorkProfiles(
-            workforcePersonProfile?.workProfiles || []
+            workforcePersonProfile?.workProfiles || [],
+            runId
           );
         } catch (err) {
           console.error("Failed to fetch workforcePersonProfile details:", err);
