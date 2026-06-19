@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.9.8
+// @version      0.9.9
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -615,17 +615,21 @@
       const el = document.createElement("ui5-text-xweb-people-profile");
       el.classList.add("ui5Custom");
 
-      // if (label) {
-      //   el.append(`${label}: `);
-      // }
-
       if (label === "Position") {
         const link = createPositionLink(value);
         el.append(link || value);
-      } else {
-        el.append(value);
+        return el;
       }
 
+      if (Array.isArray(value)) {
+        for (const part of value) {
+          if (part == null || part === "") continue;
+          el.append(part);
+        }
+        return el;
+      }
+
+      el.append(value);
       return el;
     }
 
@@ -667,12 +671,51 @@
       return a;
     }
 
+    function createDocumentGenerationLink(userId) {
+      if (!userId) return null;
+
+      const a = document.createElement("a");
+      a.href = `/xi/ui/documentgeneration/pages/generator.xhtml?userId=${encodeURIComponent(userId)}`;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = "📜";
+      a.title = `Generate document for ${userId}`;
+      a.style.color = "inherit";
+      a.style.textDecoration = "none";
+      a.style.marginLeft = "0.35rem";
+      a.style.cursor = "pointer";
+
+      return a;
+    }
+
     function buildProfileRows(profile) {
+      const idParts = [];
+
+      if (profile?.personIdExternal) {
+        idParts.push(`PersonId: ${profile.personIdExternal}`);
+      }
+
+      if (profile?.legacyId) {
+        if (idParts.length) {
+          idParts.push(" ");
+        }
+
+        idParts.push(`UserId: ${profile.legacyId}`);
+
+        const docGenLink = createDocumentGenerationLink(profile.legacyId);
+        if (docGenLink) {
+          idParts.push(" ");
+          idParts.push(docGenLink);
+        }
+      }
+
       return [
         [
           "Dates",
           [
-            profile?.hireDate ? `${ isAfterToday(profile?.hireDate) ? '🟡 Future Hire' : (profile.isActive ? '🟢 Hire' : '⚫ Hire')}: ${profile.hireDate}` : null,
+            profile?.hireDate
+              ? `${isAfterToday(profile?.hireDate) ? "🟡 Future Hire" : profile.isActive ? "🟢 Hire" : "⚫ Hire"}: ${profile.hireDate}`
+              : null,
             profile?.companyExitDate ? `🔴 Exit: ${profile.companyExitDate}` : null
           ]
             .filter(Boolean)
@@ -681,15 +724,7 @@
         ["Position", profile.custom02],
         ["Unit", profile.departmentName],
         ["Entity", profile.custom05],
-        [
-          "Ids",
-          [
-            profile?.personIdExternal ? `PersonId: ${profile.personIdExternal}` : null,
-            profile?.legacyId ? `UserId: ${profile.legacyId}` : null
-          ]
-            .filter(Boolean)
-            .join(" ")
-        ],
+        ["Ids", idParts.length ? idParts : null]
       ];
     }
 
@@ -708,54 +743,6 @@
       }
       return true;
     }
-
-    function appendDocumentGenerationButton(profile) {
-      const userId = profile?.legacyId;
-      if (!userId) return false;
-
-      const containers = findUserDisplayNameContainers();
-      if (!containers.length) return false;
-
-      for (const container of containers) {
-        const existing = container.querySelector('[data-sapsf-ui-hack-docgen-button="true"]');
-
-        if (existing) {
-          existing.dataset.userId = userId;
-          existing.title = `Generate document for ${userId}`;
-          return true;
-        }
-
-        const button = document.createElement("button");
-        button.type = "button";
-        button.textContent = "📜";
-        button.title = `Generate document for ${userId}`;
-        button.dataset.sapsfUiHackDocgenButton = "true";
-        button.dataset.userId = userId;
-
-        button.style.padding = "0";
-        button.style.border = "none";
-        button.style.background = "transparent";
-        button.style.cursor = "pointer";
-        button.style.fontSize = "1.1rem";
-        button.style.lineHeight = "1";
-
-        button.addEventListener("click", event => {
-          event.preventDefault();
-          event.stopPropagation();
-
-          window.open(
-            `/xi/ui/documentgeneration/pages/generator.xhtml?userId=${encodeURIComponent(userId)}`,
-            "_blank",
-            "noopener,noreferrer"
-          );
-        });
-
-        container.appendChild(button);
-      }
-
-      return true;
-    }
-
 
     function enrichWorkProfileItem(profile) {
       if (!profile?.id) return false;
@@ -792,8 +779,6 @@
           : workProfiles.find(p => p?.id === selectedProfileId);
 
       if (!profile) return false;
-
-      appendDocumentGenerationButton(profile);
 
       const selectedEmployment = document.querySelector("#selectedEmployment");
       const fullProfileContainer = findFullProfileDetailContainer();
