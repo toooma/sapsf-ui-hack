@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.9.7
+// @version      0.9.8
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -710,7 +710,6 @@
     }
 
     function appendDocumentGenerationButton(profile) {
-      return false;
       const userId = profile?.legacyId;
       if (!userId) return false;
 
@@ -719,10 +718,13 @@
 
       for (const container of containers) {
         const existing = container.querySelector('[data-sapsf-ui-hack-docgen-button="true"]');
+
         if (existing) {
-          if (existing.dataset.userId === userId) return true;
-          existing.remove();
+          existing.dataset.userId = userId;
+          existing.title = `Generate document for ${userId}`;
+          return true;
         }
+
         const button = document.createElement("button");
         button.type = "button";
         button.textContent = "📜";
@@ -748,22 +750,12 @@
           );
         });
 
-        const keepButtonLast = () => {
-          if (container.lastElementChild !== button) {
-            container.appendChild(button);
-          }
-        };
-        keepButtonLast();
-        const observer = new MutationObserver(keepButtonLast);
-        observer.observe(container, {
-          childList: true
-        });
-        setTimeout(() => observer.disconnect(), 3000);
-
-        console.log("✅ Document generation button added for userId:", userId);
+        container.appendChild(button);
       }
+
       return true;
     }
+
 
     function enrichWorkProfileItem(profile) {
       if (!profile?.id) return false;
