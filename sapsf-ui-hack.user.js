@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.9.4
+// @version      0.9.5
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -473,7 +473,7 @@
     {
       id: "positionPendingWorkflowLink",
       route: location =>
-        location.pathname === (ROUTES.POSITION || ROUTES.MANAGE_DATA) &&
+        [ROUTES.POSITION, ROUTES.MANAGE_DATA].includes(location.pathname) &&
         location.hash.includes("t=Position"),
       init: initPositionPendingWorkflowLink
     },
@@ -765,12 +765,20 @@
         `ui5-li-custom-xweb-people-profile[id="${CSS.escape(profile.id)}"]`
       );
       if (!li) return false;
-      li.parentElement?.append(li);
-      if (li.getAttribute(ENRICHED_ATTR) === "true") return true;
+      if (li.getAttribute(ENRICHED_ATTR) === "true") {
+        return true;
+      }
       const container = findEmploymentContainer(li);
-      if (!container) return false;
+      if (!container) {
+        return false;
+      }
       renderProfileRows(container, profile);
       li.setAttribute(ENRICHED_ATTR, "true");
+      // Only move the element after successful enrichment.
+      // Also avoid moving it if it is already the last child.
+      if (li.parentElement && li.parentElement.lastElementChild !== li) {
+        li.parentElement.appendChild(li);
+      }
       console.log("✅ Enriched work profile item:", profile.id);
       return true;
     }
