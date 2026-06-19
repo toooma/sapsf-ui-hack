@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      0.9.9
+// @version      1.0.1
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -594,13 +594,10 @@
       if (profileDetailsCache.has(id)) {
         return profileDetailsCache.get(id);
       }
-
       const promise = fetchJson(
         `/rest/workforce/v1/workforcePersonProfiles/${id}?$expand=workProfiles($select=id,displayTitle,legacyId,displayName,departmentName,departmentId,locationName,locationId,isPrimary,assignmentTag,isActive,workerType,timeZone,hireDate,serviceDate,companyExitDate,custom02,custom05,hrManagerId)&$select=id,personId,displayName,internalId,externalId,email,dateOfBirth`
       );
-
       profileDetailsCache.set(id, promise);
-
       try {
         return await promise;
       } catch (err) {
@@ -611,16 +608,13 @@
 
     function createUi5Text(label, value) {
       if (!value) return null;
-
       const el = document.createElement("ui5-text-xweb-people-profile");
       el.classList.add("ui5Custom");
-
       if (label === "Position") {
         const link = createPositionLink(value);
         el.append(link || value);
         return el;
       }
-
       if (Array.isArray(value)) {
         for (const part of value) {
           if (part == null || part === "") continue;
@@ -628,7 +622,6 @@
         }
         return el;
       }
-
       el.append(value);
       return el;
     }
@@ -683,7 +676,7 @@
       a.style.color = "inherit";
       a.style.textDecoration = "none";
       a.style.marginLeft = "0.35rem";
-      a.style.cursor = "pointer";
+      a.style.setProperty("cursor", "pointer", "important");
 
       return a;
     }
