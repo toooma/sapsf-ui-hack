@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.0.4
+// @version      1.0.6
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -478,11 +478,11 @@
       init: initPositionPendingWorkflowLink
     },
     {
-      id: "positionCurrentIncumbentLink",
+      id: "positionRecentIncumbentLink",
       route: location =>
         [ROUTES.POSITION, ROUTES.MANAGE_DATA].includes(location.pathname) &&
         location.hash.includes("t=Position"),
-      init: initPositionCurrentIncumbentLink
+      init: initPositionRecentIncumbentLink
     },
 
     /*
@@ -1264,9 +1264,9 @@
     }, timeoutMs);
   }
 
-  function initPositionCurrentIncumbentLink() {
+  function initPositionRecentIncumbentLink() {
     const timeoutMs = 10000;
-    const LINK_ATTR = "data-sapsf-ui-hack-current-incumbent-link";
+    const LINK_ATTR = "data-sapsf-ui-hack-recent-incumbent-link";
 
     const incumbentPromiseByPositionCode = new Map();
     const userPromiseByUserId = new Map();
@@ -1278,13 +1278,13 @@
       return document.querySelector(".sfToolbar");
     }
 
-    function removeCurrentIncumbentLink() {
+    function removeRecentIncumbentLink() {
       document
         .querySelectorAll(`[${LINK_ATTR}="true"]`)
         .forEach(el => el.remove());
     }
 
-    function fetchCurrentIncumbentUserId(positionCode) {
+    function fetchRecentIncumbentUserId(positionCode) {
       if (!positionCode) return Promise.resolve(null);
 
       if (!incumbentPromiseByPositionCode.has(positionCode)) {
@@ -1321,10 +1321,10 @@
       return userPromiseByUserId.get(userId);
     }
 
-    function appendCurrentIncumbentLink(toolbar, positionCode, userId, displayName) {
+    function appendRecentIncumbentLink(toolbar, positionCode, userId, displayName) {
       if (!toolbar || !positionCode) return false;
 
-      removeCurrentIncumbentLink();
+      removeRecentIncumbentLink();
 
       const container = document.createElement("span");
       container.setAttribute(LINK_ATTR, "true");
@@ -1332,12 +1332,12 @@
       container.className = "toolbarButtonContainer btn";
 
       if (!userId) {
-        container.textContent = "Current incumbent: none";
+        container.textContent = "Recent incumbent: None";
         container.style.marginLeft = "0.5rem";
         container.style.opacity = "0.75";
         toolbar.appendChild(container);
 
-        console.log("✅ Current incumbent empty marker appended:", positionCode);
+        console.log("✅ Recent incumbent empty marker appended:", positionCode);
 
         return true;
       }
@@ -1348,7 +1348,7 @@
       a.rel = "noopener noreferrer";
       a.className =
         "globalIconFont1Container fd-button fd-button--compact fd-button--transparent toolbarButtonWithLabel toolbarButton";
-      a.title = `Open current incumbent profile: ${displayName || userId}`;
+      a.title = `Open incumbent profile: ${displayName || userId}`;
       a.style.marginLeft = "0.5rem";
       a.style.textDecoration = "none";
 
@@ -1364,7 +1364,7 @@
 
       const text = document.createElement("span");
       text.className = "text fd-button__text fd-button__text--compact";
-      text.textContent = `Current incumbent: ${displayName || userId} (${userId})`;
+      text.textContent = `Recent incumbent: ${displayName || userId} (${userId})`;
 
       label.appendChild(text);
       outer.append(icon, label);
@@ -1372,12 +1372,12 @@
       container.appendChild(a);
       toolbar.appendChild(container);
 
-      console.log("✅ Current incumbent link appended:", positionCode, userId, displayName);
+      console.log("✅ Recent incumbent link appended:", positionCode, userId, displayName);
 
       return true;
     }
 
-    async function enrichCurrentIncumbentIfNeeded() {
+    async function enrichRecentIncumbentIfNeeded() {
       const toolbar = findToolbar();
       const positionCode = getPositionCodeFromPage();
 
@@ -1389,9 +1389,9 @@
 
       lastRenderedPositionCode = positionCode;
 
-      removeCurrentIncumbentLink();
+      removeRecentIncumbentLink();
 
-      const userId = await fetchCurrentIncumbentUserId(positionCode);
+      const userId = await fetchRecentIncumbentUserId(positionCode);
 
       // The selected position may have changed while the async calls were running.
       if (getPositionCodeFromPage() !== positionCode) {
@@ -1405,7 +1405,7 @@
         return false;
       }
 
-      return appendCurrentIncumbentLink(toolbar, positionCode, userId, displayName);
+      return appendRecentIncumbentLink(toolbar, positionCode, userId, displayName);
     }
 
     function scheduleEnrichment() {
@@ -1416,8 +1416,8 @@
       requestAnimationFrame(() => {
         scheduled = false;
 
-        safeRun("positionCurrentIncumbentLink refresh", async () => {
-          await enrichCurrentIncumbentIfNeeded();
+        safeRun("positionRecentIncumbentLink refresh", async () => {
+          await enrichRecentIncumbentIfNeeded();
         });
       });
     }
@@ -1438,11 +1438,11 @@
       // Do not disconnect permanently. SAP changes position content without page reload,
       // so this observer must keep watching.
       if (!lastRenderedPositionCode) {
-        console.warn("⚠️ Position toolbar/current incumbent link could not be added yet.");
+        console.warn("⚠️ Position toolbar/ incumbent link could not be added yet.");
       }
     }, timeoutMs);
 
-    console.log("✅ Position current incumbent watcher initialized.");
+    console.log("✅ Position incumbent watcher initialized.");
   }
 
 
