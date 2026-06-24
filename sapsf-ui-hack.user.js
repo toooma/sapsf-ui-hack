@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.0.1
+// @version      1.0.2
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -517,7 +517,13 @@
       route: ROUTES.LIVE_PROFILE,
       urlPattern: /\/rest\/workforce\/v1\/workforcePersonProfiles\//,
       handle: handleLiveProfileWorkforcePersonProfileFetch
-    }
+    },
+    {
+      id: "liveProfileCostAssignment",
+      route: ROUTES.LIVE_PROFILE,
+      urlPattern: /\/rest\/workforce\/assignment\/additionalinfo\/uiconfig\/v1\/configs\/costAssignment\b/,
+      handle: handleLiveProfileCostAssignmentFetch
+    },
 
     /*
      * Add future fetch target handlers here:
@@ -914,6 +920,130 @@
       .catch(err => {
         console.error("Failed to parse WorkProfile response JSON:", err);
       });
+  }
+
+  function handleLiveProfileCostAssignmentFetch({ response }) {
+    response
+      .clone()
+      .json()
+      .then(data => {
+        const timeslice = data?.$data?.timeslices?.[0];
+        const items = timeslice?.items || [];
+
+        if (!items.length) return;
+
+        enrichLiveProfileCostAssignmentCards(items);
+      })
+      .catch(err => {
+        console.error("Failed to parse Cost Assignment response JSON:", err);
+      });
+  }
+
+  function enrichLiveProfileCostAssignmentCards(items) {
+    const enrichedAttr = "data-sapsf-ui-hack-cost-assignment-enriched";
+    const timeoutMs = 10000;
+
+    const enrichableItems = items
+      .map(item => ({
+        percentage: item?.percentage,
+        code: item?.workBreakdownStructureDetail?.code
+      }))
+      .filter(item => item.code && item.percentage !== null && item.percentage !== undefined);
+
+    if (!enrichableItems.length) return;
+
+    let done = false;
+
+    function findAdditionalAssignmentCards() {
+      return [...document.querySelectorAll('ui5-text-xweb-people-profile[title="Additional Assignment"]')]
+        .map(titleEl =>
+          titleEl.closest(
+            'div[class^="ListCard_itemContent__"], div[class*=" ListCard_itemContent__"]'
+          )
+        )
+        .filter(Boolean);
+    }
+
+    function findPercentageEl(card, percentage) {
+      const percentageText = `${percentage}%`;
+
+      return [...card.querySelectorAll("ui5-text-xweb-people-profile")]
+        .find(el =>
+          el.getAttribute("title") === percentageText ||
+          el.getAttribute("aria-label") === percentageText ||
+          el.textContent.trim() === percentageText
+        );
+    }
+
+    function appendCode(percentageEl, code) {
+      if (!percentageEl || percentageEl.getAttribute(enrichedAttr) === "true") {
+        return false;
+      }
+
+      const bdi = percentageEl.querySelector("bdi") || percentageEl;
+      const currentText = bdi.textContent.trim();
+
+      if (currentText.includes(code)) {
+        percentageEl.setAttribute(enrichedAttr, "true");
+        return true;
+      }
+
+      bdi.textContent = `${currentText} · ${code}`;
+
+      percentageEl.setAttribute("title", `${currentText} · ${code}`);
+      percentageEl.setAttribute("aria-label", `${currentText} · ${code}`);
+      percentageEl.setAttribute(enrichedAttr, "true");
+
+      return true;
+    }
+
+    function tryEnrich() {
+      const cards = findAdditionalAssignmentCards();
+      if (!cards.length) return false;
+
+      let enrichedCount = 0;
+
+      for (const item of enrichableItems) {
+        const card = cards.find(candidate => findPercentageEl(candidate, item.percentage));
+        const percentageEl = card && findPercentageEl(card, item.percentage);
+
+        if (appendCode(percentageEl, item.code)) {
+          enrichedCount++;
+        }
+      }
+
+      if (enrichedCount) {
+        console.log("✅ Cost Assignment cards enriched:", enrichedCount);
+      }
+
+      return enrichedCount === enrichableItems.length;
+    }
+
+    if (tryEnrich()) return;
+
+    const observer = new MutationObserver(() => {
+      if (done) return;
+
+      if (tryEnrich()) {
+        done = true;
+        observer.disconnect();
+      }
+    });
+
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["title", "aria-label"]
+    });
+
+    setTimeout(() => {
+      observer.disconnect();
+
+      if (!done) {
+        console.warn("⚠️ Cost Assignment cards could not be fully enriched.");
+      }
+    }, timeoutMs);
   }
 
   function initDocumentGeneratorUserPrefill() {
