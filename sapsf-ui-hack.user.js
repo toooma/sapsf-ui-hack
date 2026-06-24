@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.0.3
+// @version      1.0.4
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -1059,7 +1059,7 @@
 
     const userSelector = 'input[aria-label="User"]';
     const checkboxSelector = 'input[type="checkbox"][aria-checked="false"]';
-    const timeoutMs = 15000;
+    const timeoutMs = 10000;
 
     function isJuicReady(input) {
       return (
@@ -1266,22 +1266,33 @@
 
   function initPositionCurrentIncumbentLink() {
     const timeoutMs = 10000;
+    const LINK_ATTR = "data-sapsf-ui-hack-current-incumbent-link";
 
-    let incumbentPromiseByPositionCode = new Map();
-    let userPromiseByUserId = new Map();
+    const incumbentPromiseByPositionCode = new Map();
+    const userPromiseByUserId = new Map();
+
+    let lastRenderedPositionCode = null;
+    let scheduled = false;
 
     function findToolbar() {
       return document.querySelector(".sfToolbar");
+    }
+
+    function removeCurrentIncumbentLink() {
+      document
+        .querySelectorAll(`[${LINK_ATTR}="true"]`)
+        .forEach(el => el.remove());
     }
 
     function fetchCurrentIncumbentUserId(positionCode) {
       if (!positionCode) return Promise.resolve(null);
 
       if (!incumbentPromiseByPositionCode.has(positionCode)) {
-        const encodedPositionCode = positionCode.replace(/'/g, "''");
+        const escapedPositionCode = positionCode.replace(/'/g, "''");
+
         const url =
           `/odata/v2/restricted/EmpJob?%24format=json` +
-          `&%24filter=position%20eq%20'${encodeURIComponent(encodedPositionCode)}'` +
+          `&%24filter=position%20eq%20'${encodeURIComponent(escapedPositionCode)}'` +
           `&%24select=userId`;
 
         incumbentPromiseByPositionCode.set(
@@ -1310,20 +1321,26 @@
       return userPromiseByUserId.get(userId);
     }
 
-    function appendCurrentIncumbentLink(toolbar, userId, displayName) {
-      if (!toolbar || !userId) return false;
+    function appendCurrentIncumbentLink(toolbar, positionCode, userId, displayName) {
+      if (!toolbar || !positionCode) return false;
 
-      const existing = toolbar.querySelector(
-        '[data-sapsf-ui-hack-current-incumbent-link="true"]'
-      );
-
-      if (existing) {
-        existing.remove();
-      }
+      removeCurrentIncumbentLink();
 
       const container = document.createElement("span");
-      container.dataset.sapsfUiHackCurrentIncumbentLink = "true";
+      container.setAttribute(LINK_ATTR, "true");
+      container.dataset.positionCode = positionCode;
       container.className = "toolbarButtonContainer btn";
+
+      if (!userId) {
+        container.textContent = "Current incumbent: none";
+        container.style.marginLeft = "0.5rem";
+        container.style.opacity = "0.75";
+        toolbar.appendChild(container);
+
+        console.log("✅ Current incumbent empty marker appended:", positionCode);
+
+        return true;
+      }
 
       const a = document.createElement("a");
       a.href = `/sf/liveprofile?selected_user=${encodeURIComponent(userId)}`;
@@ -1355,62 +1372,79 @@
       container.appendChild(a);
       toolbar.appendChild(container);
 
-      console.log("✅ Current incumbent link appended:", userId, displayName);
+      console.log("✅ Current incumbent link appended:", positionCode, userId, displayName);
 
       return true;
     }
 
-    async function tryAppendCurrentIncumbentLink() {
+    async function enrichCurrentIncumbentIfNeeded() {
       const toolbar = findToolbar();
       const positionCode = getPositionCodeFromPage();
 
       if (!toolbar || !positionCode) return false;
 
+      if (positionCode === lastRenderedPositionCode) {
+        return true;
+      }
+
+      lastRenderedPositionCode = positionCode;
+
+      removeCurrentIncumbentLink();
+
       const userId = await fetchCurrentIncumbentUserId(positionCode);
 
-      if (!userId) {
-        console.warn("⚠️ Current incumbent not found for position:", positionCode);
-        return true;
+      // The selected position may have changed while the async calls were running.
+      if (getPositionCodeFromPage() !== positionCode) {
+        return false;
       }
 
       const displayName = await fetchUserDisplayName(userId);
 
-      return appendCurrentIncumbentLink(toolbar, userId, displayName);
+      // Check again after the second async call.
+      if (getPositionCodeFromPage() !== positionCode) {
+        return false;
+      }
+
+      return appendCurrentIncumbentLink(toolbar, positionCode, userId, displayName);
     }
 
-    let done = false;
+    function scheduleEnrichment() {
+      if (scheduled) return;
+
+      scheduled = true;
+
+      requestAnimationFrame(() => {
+        scheduled = false;
+
+        safeRun("positionCurrentIncumbentLink refresh", async () => {
+          await enrichCurrentIncumbentIfNeeded();
+        });
+      });
+    }
 
     const observer = new MutationObserver(() => {
-      if (done) return;
-
-      safeRun("positionCurrentIncumbentLink observer", async () => {
-        if (await tryAppendCurrentIncumbentLink()) {
-          done = true;
-          observer.disconnect();
-        }
-      });
+      scheduleEnrichment();
     });
 
     observer.observe(document.documentElement, {
       childList: true,
-      subtree: true
+      subtree: true,
+      characterData: true
     });
 
-    safeRun("positionCurrentIncumbentLink initial run", async () => {
-      if (await tryAppendCurrentIncumbentLink()) {
-        done = true;
-        observer.disconnect();
-      }
-    });
+    scheduleEnrichment();
 
     setTimeout(() => {
-      observer.disconnect();
-
-      if (!done) {
-        console.warn("⚠️ Position toolbar/current incumbent link could not be added.");
+      // Do not disconnect permanently. SAP changes position content without page reload,
+      // so this observer must keep watching.
+      if (!lastRenderedPositionCode) {
+        console.warn("⚠️ Position toolbar/current incumbent link could not be added yet.");
       }
     }, timeoutMs);
+
+    console.log("✅ Position current incumbent watcher initialized.");
   }
+
 
 
   /**************************************************************************
