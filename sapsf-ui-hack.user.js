@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.0.2
+// @version      1.0.3
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -476,6 +476,13 @@
         [ROUTES.POSITION, ROUTES.MANAGE_DATA].includes(location.pathname) &&
         location.hash.includes("t=Position"),
       init: initPositionPendingWorkflowLink
+    },
+    {
+      id: "positionCurrentIncumbentLink",
+      route: location =>
+        [ROUTES.POSITION, ROUTES.MANAGE_DATA].includes(location.pathname) &&
+        location.hash.includes("t=Position"),
+      init: initPositionCurrentIncumbentLink
     },
 
     /*
@@ -1152,6 +1159,10 @@
     }, timeoutMs);
   }
 
+  function getPositionCodeFromPage() {
+    const row = [...document.querySelectorAll('tr[id$="__field_0"]')][0];
+    return row?.querySelector("td.field_value")?.innerText?.trim() || null;
+  }
 
   function initPositionPendingWorkflowLink() {
     const timeoutMs = 10000;
@@ -1163,11 +1174,6 @@
     function findPendingWorkflowAlert() {
       return [...document.querySelectorAll('div[role="alert"]')]
         .find(el => el.innerText?.toLowerCase().includes("pending workflow"));
-    }
-
-    function getPositionCodeFromPage() {
-      const row = [...document.querySelectorAll('tr[id$="__field_0"]')][0];
-      return row?.querySelector("td.field_value")?.innerText?.trim() || null;
     }
 
     function fetchPendingPositionWorkflows() {
@@ -1258,6 +1264,153 @@
     }, timeoutMs);
   }
 
+  function initPositionCurrentIncumbentLink() {
+    const timeoutMs = 10000;
+
+    let incumbentPromiseByPositionCode = new Map();
+    let userPromiseByUserId = new Map();
+
+    function findToolbar() {
+      return document.querySelector(".sfToolbar");
+    }
+
+    function fetchCurrentIncumbentUserId(positionCode) {
+      if (!positionCode) return Promise.resolve(null);
+
+      if (!incumbentPromiseByPositionCode.has(positionCode)) {
+        const encodedPositionCode = positionCode.replace(/'/g, "''");
+        const url =
+          `/odata/v2/restricted/EmpJob?%24format=json` +
+          `&%24filter=position%20eq%20'${encodeURIComponent(encodedPositionCode)}'` +
+          `&%24select=userId`;
+
+        incumbentPromiseByPositionCode.set(
+          positionCode,
+          fetchJson(url).then(data => data?.d?.results?.[0]?.userId || null)
+        );
+      }
+
+      return incumbentPromiseByPositionCode.get(positionCode);
+    }
+
+    function fetchUserDisplayName(userId) {
+      if (!userId) return Promise.resolve(null);
+
+      if (!userPromiseByUserId.has(userId)) {
+        const url =
+          `/odata/v2/restricted/User(%27${encodeURIComponent(userId)}%27)` +
+          `?%24format=json&%24select=displayName`;
+
+        userPromiseByUserId.set(
+          userId,
+          fetchJson(url).then(data => data?.d?.displayName || null)
+        );
+      }
+
+      return userPromiseByUserId.get(userId);
+    }
+
+    function appendCurrentIncumbentLink(toolbar, userId, displayName) {
+      if (!toolbar || !userId) return false;
+
+      const existing = toolbar.querySelector(
+        '[data-sapsf-ui-hack-current-incumbent-link="true"]'
+      );
+
+      if (existing) {
+        existing.remove();
+      }
+
+      const container = document.createElement("span");
+      container.dataset.sapsfUiHackCurrentIncumbentLink = "true";
+      container.className = "toolbarButtonContainer btn";
+
+      const a = document.createElement("a");
+      a.href = `/sf/liveprofile?selected_user=${encodeURIComponent(userId)}`;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.className =
+        "globalIconFont1Container fd-button fd-button--compact fd-button--transparent toolbarButtonWithLabel toolbarButton";
+      a.title = `Open current incumbent profile: ${displayName || userId}`;
+      a.style.marginLeft = "0.5rem";
+      a.style.textDecoration = "none";
+
+      const outer = document.createElement("span");
+      outer.className = "btn";
+
+      const icon = document.createElement("span");
+      icon.className = "icon sap-icon sap-icon--compact sap-icon--employee";
+      icon.innerHTML = "&nbsp;";
+
+      const label = document.createElement("em");
+      label.className = "label link";
+
+      const text = document.createElement("span");
+      text.className = "text fd-button__text fd-button__text--compact";
+      text.textContent = `Current incumbent: ${displayName || userId} (${userId})`;
+
+      label.appendChild(text);
+      outer.append(icon, label);
+      a.appendChild(outer);
+      container.appendChild(a);
+      toolbar.appendChild(container);
+
+      console.log("✅ Current incumbent link appended:", userId, displayName);
+
+      return true;
+    }
+
+    async function tryAppendCurrentIncumbentLink() {
+      const toolbar = findToolbar();
+      const positionCode = getPositionCodeFromPage();
+
+      if (!toolbar || !positionCode) return false;
+
+      const userId = await fetchCurrentIncumbentUserId(positionCode);
+
+      if (!userId) {
+        console.warn("⚠️ Current incumbent not found for position:", positionCode);
+        return true;
+      }
+
+      const displayName = await fetchUserDisplayName(userId);
+
+      return appendCurrentIncumbentLink(toolbar, userId, displayName);
+    }
+
+    let done = false;
+
+    const observer = new MutationObserver(() => {
+      if (done) return;
+
+      safeRun("positionCurrentIncumbentLink observer", async () => {
+        if (await tryAppendCurrentIncumbentLink()) {
+          done = true;
+          observer.disconnect();
+        }
+      });
+    });
+
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+
+    safeRun("positionCurrentIncumbentLink initial run", async () => {
+      if (await tryAppendCurrentIncumbentLink()) {
+        done = true;
+        observer.disconnect();
+      }
+    });
+
+    setTimeout(() => {
+      observer.disconnect();
+
+      if (!done) {
+        console.warn("⚠️ Position toolbar/current incumbent link could not be added.");
+      }
+    }, timeoutMs);
+  }
 
 
   /**************************************************************************
