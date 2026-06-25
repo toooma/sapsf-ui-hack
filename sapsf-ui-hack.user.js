@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.0.6
+// @version      1.0.7
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -1335,7 +1335,8 @@
         container.textContent = "Recent incumbent: None";
         container.style.marginLeft = "0.5rem";
         container.style.opacity = "0.75";
-        toolbar.appendChild(container);
+        toolbar.prepend(container);
+        // toolbar.appendChild(container);
 
         console.log("✅ Recent incumbent empty marker appended:", positionCode);
 
@@ -1383,9 +1384,9 @@
 
       if (!toolbar || !positionCode) return false;
 
-      if (positionCode === lastRenderedPositionCode) {
-        return true;
-      }
+      // if (positionCode === lastRenderedPositionCode) {
+      //   return true;
+      // }
 
       lastRenderedPositionCode = positionCode;
 
