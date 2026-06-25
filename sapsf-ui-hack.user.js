@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.1.4
+// @version      1.1.6
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -1205,8 +1205,6 @@
     ].join("-");
   }
 
-
-
   function initPositionPendingWorkflowLink() {
     const timeoutMs = 10000;
     const workflowUrl =
@@ -1337,6 +1335,7 @@
         const url =
           `/odata/v2/restricted/EmpJob?%24format=json` +
           `&%24filter=position%20eq%20'${encodeURIComponent(escapedPositionCode)}'` +
+          `%20and%20emplStatusNav%2FexternalCode%20ne%20'T'` +
           `&%24select=userId` +
           (asOfDate ? `&asOfDate=${encodeURIComponent(asOfDate)}` : "");
 
