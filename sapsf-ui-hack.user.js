@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.0.7
+// @version      1.0.9
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -1271,7 +1271,6 @@
     const incumbentPromiseByPositionCode = new Map();
     const userPromiseByUserId = new Map();
 
-    let lastRenderedPositionCode = null;
     let scheduled = false;
 
     function findToolbar() {
@@ -1336,7 +1335,6 @@
         container.style.marginLeft = "0.5rem";
         container.style.opacity = "0.75";
         toolbar.prepend(container);
-        // toolbar.appendChild(container);
 
         console.log("✅ Recent incumbent empty marker appended:", positionCode);
 
@@ -1378,35 +1376,80 @@
       return true;
     }
 
+    let inFlightPositionCode = null;
+    let successfulRenderCount = 0;
+
+    function findExistingRecentIncumbentLink(positionCode) {
+      return document.querySelector(
+        `[${LINK_ATTR}="true"][data-position-code="${CSS.escape(positionCode)}"]`
+      );
+    }
+
     async function enrichRecentIncumbentIfNeeded() {
-      const toolbar = findToolbar();
       const positionCode = getPositionCodeFromPage();
+      if (!positionCode) return false;
 
-      if (!toolbar || !positionCode) return false;
+      const toolbar = findToolbar();
+      if (!toolbar) return false;
 
-      // if (positionCode === lastRenderedPositionCode) {
-      //   return true;
-      // }
+      // If the current DOM already has the correct enrichment, do nothing.
+      // This avoids double enrichment.
+      const existingLink = findExistingRecentIncumbentLink(positionCode);
+      if (existingLink && toolbar.contains(existingLink)) {
+        return true;
+      }
 
-      lastRenderedPositionCode = positionCode;
-
-      removeRecentIncumbentLink();
-
-      const userId = await fetchRecentIncumbentUserId(positionCode);
-
-      // The selected position may have changed while the async calls were running.
-      if (getPositionCodeFromPage() !== positionCode) {
+      // Avoid starting duplicate async enrichments for the same position while one is running.
+      if (inFlightPositionCode === positionCode) {
         return false;
       }
 
-      const displayName = await fetchUserDisplayName(userId);
+      inFlightPositionCode = positionCode;
 
-      // Check again after the second async call.
-      if (getPositionCodeFromPage() !== positionCode) {
-        return false;
+      try {
+        const userId = await fetchRecentIncumbentUserId(positionCode);
+
+        // Position may have changed while async request was running.
+        if (getPositionCodeFromPage() !== positionCode) {
+          return false;
+        }
+
+        const displayName = await fetchUserDisplayName(userId);
+
+        // Re-check after second async request.
+        if (getPositionCodeFromPage() !== positionCode) {
+          return false;
+        }
+
+        // Re-query toolbar because SAP may have replaced the DOM while we were waiting.
+        const currentToolbar = findToolbar();
+        if (!currentToolbar) return false;
+
+        // If another run already enriched the current DOM, avoid duplicate append.
+        const currentExistingLink = findExistingRecentIncumbentLink(positionCode);
+        if (currentExistingLink && currentToolbar.contains(currentExistingLink)) {
+          return true;
+        }
+
+        removeRecentIncumbentLink();
+
+        const success = appendRecentIncumbentLink(
+          currentToolbar,
+          positionCode,
+          userId,
+          displayName
+        );
+
+        if (success) {
+          successfulRenderCount++;
+        }
+
+        return success;
+      } finally {
+        if (inFlightPositionCode === positionCode) {
+          inFlightPositionCode = null;
+        }
       }
-
-      return appendRecentIncumbentLink(toolbar, positionCode, userId, displayName);
     }
 
     function scheduleEnrichment() {
@@ -1438,7 +1481,7 @@
     setTimeout(() => {
       // Do not disconnect permanently. SAP changes position content without page reload,
       // so this observer must keep watching.
-      if (!lastRenderedPositionCode) {
+      if (!successfulRenderCount) {
         console.warn("⚠️ Position toolbar/ incumbent link could not be added yet.");
       }
     }, timeoutMs);
