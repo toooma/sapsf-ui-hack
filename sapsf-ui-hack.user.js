@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.1.0
+// @version      1.1.1
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -1161,8 +1161,9 @@
   }
 
   function getPositionCodeFromPage() {
-    const row = [...document.querySelectorAll('tr[id$="__field_0"]')][0];
-    return row?.querySelector("td.field_value")?.innerText?.trim() || null;
+    const panel = document.querySelector('div.MDFViewPanel');
+    const row = panel?.querySelector('tr[id$="__field_0"]');
+    return row?.querySelector('td.field_value')?.innerText?.trim() || null;
   }
 
   function initPositionPendingWorkflowLink() {
