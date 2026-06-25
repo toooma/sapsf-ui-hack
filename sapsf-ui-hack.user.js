@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.1.3
+// @version      1.1.4
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -1166,6 +1166,47 @@
     return row?.querySelector('td.field_value')?.innerText?.trim() || null;
   }
 
+  function getPositionEffectiveDateFromPage() {
+    const panel = document.querySelector("div.MDFViewPanel");
+    const row = panel?.querySelector('tr[id$="__field_1"]');
+    const rawDate = row?.querySelector("td.field_value")?.innerText?.trim();
+    return toIsoDate(rawDate);
+  }
+
+  function toIsoDate(dateStr) {
+    if (!dateStr) return null;
+
+    const value = dateStr.trim();
+
+    // Prefer dd/mm/yyyy only when "/" separators are used.
+    const dmy = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (dmy) {
+      const [, dd, mm, yyyy] = dmy;
+      const date = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+
+      // Validate real calendar date.
+      if (
+        date.getFullYear() === Number(yyyy) &&
+        date.getMonth() === Number(mm) - 1 &&
+        date.getDate() === Number(dd)
+      ) {
+        return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+      }
+    }
+
+    // Fallback to JS parsing for other typical formats.
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+
+    return [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, "0"),
+      String(date.getDate()).padStart(2, "0")
+    ].join("-");
+  }
+
+
+
   function initPositionPendingWorkflowLink() {
     const timeoutMs = 10000;
     const workflowUrl =
@@ -1285,25 +1326,29 @@
         .forEach(el => el.remove());
     }
 
-    function fetchIncumbentUserId(positionCode) {
+    function fetchIncumbentUserId(positionCode, asOfDate) {
       if (!positionCode) return Promise.resolve(null);
 
-      if (!incumbentPromiseByPositionCode.has(positionCode)) {
+      const cacheKey = `${positionCode}|${asOfDate || ""}`;
+
+      if (!incumbentPromiseByPositionCode.has(cacheKey)) {
         const escapedPositionCode = positionCode.replace(/'/g, "''");
 
         const url =
           `/odata/v2/restricted/EmpJob?%24format=json` +
           `&%24filter=position%20eq%20'${encodeURIComponent(escapedPositionCode)}'` +
-          `&%24select=userId`;
+          `&%24select=userId` +
+          (asOfDate ? `&asOfDate=${encodeURIComponent(asOfDate)}` : "");
 
         incumbentPromiseByPositionCode.set(
-          positionCode,
+          cacheKey,
           fetchJson(url).then(data => data?.d?.results?.[0]?.userId || null)
         );
       }
 
-      return incumbentPromiseByPositionCode.get(positionCode);
+      return incumbentPromiseByPositionCode.get(cacheKey);
     }
+
 
     function fetchUserDisplayName(userId) {
       if (!userId) return Promise.resolve(null);
@@ -1322,7 +1367,7 @@
       return userPromiseByUserId.get(userId);
     }
 
-    function appendIncumbentLink(toolbar, positionCode, userId, displayName) {
+    function appendIncumbentLink(toolbar, positionCode, userId, displayName, asOfDate) {
       if (!toolbar || !positionCode) return false;
 
       removeIncumbentLink();
@@ -1330,6 +1375,7 @@
       const container = document.createElement("span");
       container.setAttribute(LINK_ATTR, "true");
       container.dataset.positionCode = positionCode;
+      container.dataset.asOfDate = asOfDate || "";
       container.className = "toolbarButtonContainer btn";
 
       if (!userId) {
@@ -1391,6 +1437,8 @@
       const positionCode = getPositionCodeFromPage();
       if (!positionCode) return false;
 
+      const asOfDate = getPositionEffectiveDateFromPage();
+
       const toolbar = findToolbar();
       if (!toolbar) return false;
 
@@ -1409,7 +1457,7 @@
       inFlightPositionCode = positionCode;
 
       try {
-        const userId = await fetchIncumbentUserId(positionCode);
+        const userId = await fetchIncumbentUserId(positionCode, asOfDate);
 
         // Position may have changed while async request was running.
         if (getPositionCodeFromPage() !== positionCode) {
@@ -1439,7 +1487,8 @@
           currentToolbar,
           positionCode,
           userId,
-          displayName
+          displayName,
+          asOfDate
         );
 
         if (success) {
