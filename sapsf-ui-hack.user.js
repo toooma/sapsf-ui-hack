@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.0.9
+// @version      1.1.0
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -110,6 +110,7 @@
   }
 
   const isAfterToday = dateStr => new Date(dateStr) > new Date(new Date().toDateString());
+  const today = new Date().toLocaleDateString('en-CA');
 
   function juicSetValue(input, value, key = value[0] || '') {
     const el = typeof input === 'string' ? document.querySelector(input) : input;
@@ -1292,6 +1293,7 @@
         const url =
           `/odata/v2/restricted/EmpJob?%24format=json` +
           `&%24filter=position%20eq%20'${encodeURIComponent(escapedPositionCode)}'` +
+          `&fromDate=${today}` +
           `&%24select=userId`;
 
         incumbentPromiseByPositionCode.set(
