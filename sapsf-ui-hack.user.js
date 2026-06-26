@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.1.6
+// @version      1.1.7
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -97,15 +97,12 @@
 
   function getFetchUrl(args) {
     const input = args?.[0];
-
     if (typeof input === "string") {
       return input;
     }
-
     if (input instanceof URL) {
       return input.href;
     }
-
     return input?.url || "";
   }
 
@@ -149,6 +146,8 @@
 
     return true;
   }
+
+  const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
   /**************************************************************************
    * 2. Global features, running on every page
@@ -221,11 +220,8 @@
 
     const waitTimer = setInterval(() => {
       if (!isAvailable()) return;
-
       clearInterval(waitTimer);
-
       console.log("✅ SFSessionTimeout.extendSession is available. Starting keep-alive.");
-
       extendSessionSafely();
       setInterval(extendSessionSafely, keepAliveIntervalMs);
     }, checkIntervalMs);
@@ -1335,9 +1331,9 @@
         const url =
           `/odata/v2/restricted/EmpJob?%24format=json` +
           `&%24filter=position%20eq%20'${encodeURIComponent(escapedPositionCode)}'` +
-          `%20and%20emplStatusNav%2FexternalCode%20ne%20'T'` +
+          `%20and%20(employmentNav%2FendDate%20eq%20null%20or%20employmentNav%2FendDate%20ge%20'${encodeURIComponent(asOfDate || today)}')` +
           `&%24select=userId` +
-          (asOfDate ? `&asOfDate=${encodeURIComponent(asOfDate)}` : "");
+          `&asOfDate=${encodeURIComponent(asOfDate || today)}`;
 
         incumbentPromiseByPositionCode.set(
           cacheKey,
@@ -1481,6 +1477,7 @@
         }
 
         removeIncumbentLink();
+        await delay(300);
 
         const success = appendIncumbentLink(
           currentToolbar,
