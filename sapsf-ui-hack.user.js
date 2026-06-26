@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.1.7
+// @version      1.1.8
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -1371,6 +1371,7 @@
       container.setAttribute(LINK_ATTR, "true");
       container.dataset.positionCode = positionCode;
       container.dataset.asOfDate = asOfDate || "";
+      container.style.order = -1;
       container.className = "toolbarButtonContainer btn";
 
       if (!userId) {
@@ -1477,7 +1478,6 @@
         }
 
         removeIncumbentLink();
-        await delay(300);
 
         const success = appendIncumbentLink(
           currentToolbar,
