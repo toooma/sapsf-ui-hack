@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.1.8
+// @version      1.1.9
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -595,9 +595,14 @@
 
     const profileDetailsCache = new Map();
 
+    let latestWorkProfiles = [];
+    let liveProfileReenrichObserver = null;
+    let reenrichScheduled = false;
+
     window.sapSfUiHackLiveProfileEnrichment = {
       getWorkforcePersonProfileDetails,
-      enrichWorkProfiles
+      enrichWorkProfiles,
+      setLatestWorkProfiles,
     };
 
     async function getWorkforcePersonProfileDetails(id) {
@@ -809,6 +814,82 @@
       return true;
     }
 
+    function setLatestWorkProfiles(workProfiles = []) {
+      latestWorkProfiles = workProfiles;
+      ensureLiveProfileReenrichObserver();
+    }
+
+    function hasSelectedEnrichment() {
+      const selectedEmployment = document.querySelector("#selectedEmployment");
+      const fullProfileContainer = findFullProfileDetailContainer();
+
+      const container = selectedEmployment
+        ? findEmploymentContainer(selectedEmployment)
+        : fullProfileContainer;
+
+      return Boolean(container?.querySelector(":scope > ui5-text-xweb-people-profile.ui5Custom"));
+    }
+
+    function scheduleReenrichIfNeeded() {
+      if (reenrichScheduled) return;
+
+      reenrichScheduled = true;
+
+      requestAnimationFrame(() => {
+        reenrichScheduled = false;
+
+        if (!latestWorkProfiles.length) return;
+
+        const fullProfileContainer = findFullProfileDetailContainer();
+        const selectedEmployment = document.querySelector("#selectedEmployment");
+
+        if (!fullProfileContainer && !selectedEmployment) return;
+
+        if (!hasSelectedEnrichment()) {
+          console.log("🔁 Live Profile enrichment disappeared. Re-enriching...");
+          enrichWorkProfiles(latestWorkProfiles);
+        }
+      });
+    }
+
+    function ensureLiveProfileReenrichObserver() {
+      if (liveProfileReenrichObserver) return;
+
+      liveProfileReenrichObserver = new MutationObserver(mutations => {
+        const relevant = mutations.some(mutation => {
+          if (mutation.type !== "childList") return false;
+
+          const nodes = [
+            ...mutation.addedNodes,
+            ...mutation.removedNodes
+          ];
+
+          return nodes.some(node => {
+            if (!(node instanceof HTMLElement)) return false;
+
+            return (
+              node.id === "selectedEmployment" ||
+              node.matches?.('div[class^="FullProfileDetailView_contentWrapper__"], div[class*=" FullProfileDetailView_contentWrapper__"]') ||
+              node.querySelector?.('#selectedEmployment') ||
+              node.querySelector?.('div[class^="FullProfileDetailView_contentWrapper__"], div[class*=" FullProfileDetailView_contentWrapper__"]')
+            );
+          });
+        });
+
+        if (relevant) {
+          scheduleReenrichIfNeeded();
+        }
+      });
+
+      liveProfileReenrichObserver.observe(document.documentElement, {
+        childList: true,
+        subtree: true
+      });
+
+      console.log("✅ Live Profile persistent re-enrichment observer started.");
+    }
+
+
     function enrichWorkProfiles(workProfiles = []) {
       let remaining = [...workProfiles];
       let selectedDone = false;
@@ -913,10 +994,11 @@
             wp.personIdExternal = workforcePersonProfile?.externalId;
           }
 
-          liveProfileEnrichment.enrichWorkProfiles(
-            workforcePersonProfile?.workProfiles || [],
-            runId
-          );
+          const workProfiles = workforcePersonProfile?.workProfiles || [];
+
+          liveProfileEnrichment.setLatestWorkProfiles(workProfiles);
+          liveProfileEnrichment.enrichWorkProfiles(workProfiles);
+          
         } catch (err) {
           console.error("Failed to fetch workforcePersonProfile details:", err);
         }
