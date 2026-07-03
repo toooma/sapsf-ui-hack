@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.1.9
+// @version      1.2.1
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -1285,14 +1285,24 @@
 
   function initPositionPendingWorkflowLink() {
     const timeoutMs = 10000;
+    const LINK_ATTR = "data-sapsf-ui-hack-workflow-link";
     const workflowUrl =
       "/odata/v2/restricted/Position?%24format=json&%24expand=wfRequestNav&recordStatus=pending&fromDate=2020-01-01&%24select=code,wfRequestNav%2FwfRequestId";
 
     let pendingPositionWorkflowsPromise = null;
+    let scheduled = false;
+    let inFlightPositionCode = null;
+    let successfulRenderCount = 0;
 
     function findPendingWorkflowAlert() {
       return [...document.querySelectorAll('div[role="alert"]')]
         .find(el => el.innerText?.toLowerCase().includes("pending workflow"));
+    }
+
+    function removeWorkflowLinks() {
+      document
+        .querySelectorAll(`[${LINK_ATTR}="true"]`)
+        .forEach(el => el.remove());
     }
 
     function fetchPendingPositionWorkflows() {
@@ -1305,19 +1315,23 @@
 
     function findWorkflowRequestId(results, positionCode) {
       const position = results.find(item => item?.code === positionCode);
-
       return position?.wfRequestNav?.results?.[0]?.wfRequestId || null;
     }
 
-    function appendWorkflowLink(alertEl, wfRequestId) {
-      if (!alertEl || !wfRequestId) return false;
+    function findExistingWorkflowLink(positionCode) {
+      return document.querySelector(
+        `[${LINK_ATTR}="true"][data-position-code="${CSS.escape(positionCode)}"]`
+      );
+    }
 
-      if (alertEl.querySelector('[data-sapsf-ui-hack-workflow-link="true"]')) {
-        return true;
-      }
+    function appendWorkflowLink(alertEl, positionCode, wfRequestId) {
+      if (!alertEl || !positionCode || !wfRequestId) return false;
+
+      removeWorkflowLinks();
 
       const link = document.createElement("a");
-      link.dataset.sapsfUiHackWorkflowLink = "true";
+      link.setAttribute(LINK_ATTR, "true");
+      link.dataset.positionCode = positionCode;
       link.href = `/xi/ui/ect/pages/workflowApproval/ectWorkflowApproval.xhtml?workflowRequestId=${encodeURIComponent(wfRequestId)}`;
       link.textContent = `Open workflow #${wfRequestId}`;
       link.style.marginLeft = "0.5rem";
@@ -1326,59 +1340,89 @@
 
       alertEl.appendChild(link);
 
-      console.log("✅ Pending workflow link appended:", wfRequestId);
+      console.log("✅ Pending workflow link appended:", positionCode, wfRequestId);
 
       return true;
     }
 
-    async function tryAppendWorkflowLink() {
+    async function enrichWorkflowLinkIfNeeded() {
       const alertEl = findPendingWorkflowAlert();
       const positionCode = getPositionCodeFromPage();
 
-      // Keep observing until both page elements exist.
       if (!alertEl || !positionCode) return false;
 
-      const results = await fetchPendingPositionWorkflows();
-      const wfRequestId = findWorkflowRequestId(results, positionCode);
-
-      if (!wfRequestId) {
-        console.warn("⚠️ Pending workflow request not found for position:", positionCode);
+      const existingLink = findExistingWorkflowLink(positionCode);
+      if (existingLink && alertEl.contains(existingLink)) {
         return true;
       }
 
-      return appendWorkflowLink(alertEl, wfRequestId);
+      if (inFlightPositionCode === positionCode) {
+        return false;
+      }
+
+      inFlightPositionCode = positionCode;
+
+      try {
+        const results = await fetchPendingPositionWorkflows();
+        const wfRequestId = findWorkflowRequestId(results, positionCode);
+
+        if (getPositionCodeFromPage() !== positionCode) {
+          return false;
+        }
+
+        if (!wfRequestId) {
+          removeWorkflowLinks();
+          console.warn("⚠️ Pending workflow request not found for position:", positionCode);
+          return true;
+        }
+
+        const currentAlertEl = findPendingWorkflowAlert();
+        if (!currentAlertEl) return false;
+
+        const success = appendWorkflowLink(currentAlertEl, positionCode, wfRequestId);
+
+        if (success) {
+          successfulRenderCount++;
+        }
+
+        return success;
+      } finally {
+        if (inFlightPositionCode === positionCode) {
+          inFlightPositionCode = null;
+        }
+      }
     }
 
-    let done = false;
+    function scheduleEnrichment() {
+      if (scheduled) return;
+
+      scheduled = true;
+
+      requestAnimationFrame(() => {
+        scheduled = false;
+
+        safeRun("positionPendingWorkflowLink refresh", async () => {
+          await enrichWorkflowLinkIfNeeded();
+        });
+      });
+    }
 
     const observer = new MutationObserver(() => {
-      if (done) return;
-
-      safeRun("positionPendingWorkflowLink observer", async () => {
-        if (await tryAppendWorkflowLink()) {
-          done = true;
-          observer.disconnect();
-        }
-      });
+      scheduleEnrichment();
     });
 
     observer.observe(document.documentElement, {
       childList: true,
-      subtree: true
+      subtree: true,
+      characterData: true
     });
 
-    safeRun("positionPendingWorkflowLink initial run", async () => {
-      if (await tryAppendWorkflowLink()) {
-        done = true;
-        observer.disconnect();
-      }
-    });
+    scheduleEnrichment();
 
     setTimeout(() => {
-      observer.disconnect();
-
-      if (!done) {
-        console.warn("⚠️ Pending workflow alert not found or workflow link could not be added.");
+      // Do not disconnect permanently. SAP changes position content without page reload.
+      if (!successfulRenderCount) {
+        console.warn("⚠️ Pending workflow alert not found or workflow link could not be added yet.");
       }
     }, timeoutMs);
   }
@@ -1393,7 +1437,9 @@
     let scheduled = false;
 
     function findToolbar() {
-      return document.querySelector(".sfToolbar");
+      return (
+        document.querySelector(".mdfConfigUiHeaderContainer")
+      );
     }
 
     function removeIncumbentLink() {
@@ -1415,7 +1461,7 @@
           `&%24filter=position%20eq%20'${encodeURIComponent(escapedPositionCode)}'` +
           `%20and%20(employmentNav%2FendDate%20eq%20null%20or%20employmentNav%2FendDate%20ge%20'${encodeURIComponent(asOfDate || today)}')` +
           `&%24select=userId` +
-          `&asOfDate=${encodeURIComponent(asOfDate || today)}`;
+          `&fromDate=${encodeURIComponent(asOfDate || today)}`;
 
         incumbentPromiseByPositionCode.set(
           cacheKey,
@@ -1453,54 +1499,57 @@
       container.setAttribute(LINK_ATTR, "true");
       container.dataset.positionCode = positionCode;
       container.dataset.asOfDate = asOfDate || "";
-      container.style.order = -1;
+      container.style.order = 1;
+      container.style.marginLeft = "0.5rem";
       container.className = "toolbarButtonContainer btn";
 
       if (!userId) {
         container.textContent = "Incumbent: None";
-        container.style.marginLeft = "0.5rem";
         container.style.opacity = "0.75";
-        toolbar.prepend(container);
+      } else {
+        const a = document.createElement("a");
+        a.href = `/sf/liveprofile?selected_user=${encodeURIComponent(userId)}`;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.className =
+          "globalIconFont1Container fd-button fd-button--compact fd-button--transparent toolbarButtonWithLabel toolbarButton";
+        a.title = `Open incumbent profile: ${displayName || userId}`;
+        a.style.textDecoration = "none";
 
-        console.log("✅ Incumbent empty marker appended:", positionCode);
+        const outer = document.createElement("span");
+        outer.className = "btn";
 
-        return true;
+        const icon = document.createElement("span");
+        icon.className = "icon sap-icon sap-icon--compact sap-icon--employee";
+        icon.innerHTML = "&nbsp;";
+
+        const label = document.createElement("em");
+        label.className = "label link";
+
+        const text = document.createElement("span");
+        text.className = "text fd-button__text fd-button__text--compact";
+        text.textContent = `Incumbent: ${displayName || userId} (${userId})`;
+
+        label.appendChild(text);
+        outer.append(icon, label);
+        a.appendChild(outer);
+        container.appendChild(a);
       }
 
-      const a = document.createElement("a");
-      a.href = `/sf/liveprofile?selected_user=${encodeURIComponent(userId)}`;
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-      a.className =
-        "globalIconFont1Container fd-button fd-button--compact fd-button--transparent toolbarButtonWithLabel toolbarButton";
-      a.title = `Open incumbent profile: ${displayName || userId}`;
-      a.style.marginLeft = "0.5rem";
-      a.style.textDecoration = "none";
+      const title = toolbar.querySelector(".ectFCTitle");
 
-      const outer = document.createElement("span");
-      outer.className = "btn";
-
-      const icon = document.createElement("span");
-      icon.className = "icon sap-icon sap-icon--compact sap-icon--employee";
-      icon.innerHTML = "&nbsp;";
-
-      const label = document.createElement("em");
-      label.className = "label link";
-
-      const text = document.createElement("span");
-      text.className = "text fd-button__text fd-button__text--compact";
-      text.textContent = `Incumbent: ${displayName || userId} (${userId})`;
-
-      label.appendChild(text);
-      outer.append(icon, label);
-      a.appendChild(outer);
-      container.appendChild(a);
-      toolbar.appendChild(container);
+      if (title) {
+        title.style.order = 0;
+        title.after(container);
+      } else {
+        toolbar.prepend(container);
+      }
 
       console.log("✅ Incumbent link appended:", positionCode, userId, displayName);
 
       return true;
     }
+
 
     let inFlightPositionCode = null;
     let successfulRenderCount = 0;
