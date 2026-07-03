@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.2.2
+// @version      1.2.3
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -1506,7 +1506,7 @@
       if (!userId) {
         container.textContent = "Incumbent: None";
         container.style.opacity = "0.75";
-        container.style.fontSize = "0.875";
+        container.style.fontSize = "0.875rem";
       } else {
         const a = document.createElement("a");
         a.href = `/sf/liveprofile?selected_user=${encodeURIComponent(userId)}`;
@@ -1514,7 +1514,7 @@
         a.rel = "noopener noreferrer";
         a.className =
           "globalIconFont1Container fd-button fd-button--compact fd-button--transparent toolbarButtonWithLabel toolbarButton";
-        a.title = `Open incumbent profile: ${displayName || userId}`;
+        a.title = `Open incumbent profile`;
         a.style.textDecoration = "none";
 
         const outer = document.createElement("span");
