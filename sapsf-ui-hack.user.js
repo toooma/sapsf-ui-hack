@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.2.1
+// @version      1.2.2
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -1499,13 +1499,14 @@
       container.setAttribute(LINK_ATTR, "true");
       container.dataset.positionCode = positionCode;
       container.dataset.asOfDate = asOfDate || "";
-      container.style.order = 1;
+      container.style.order = 0;
       container.style.marginLeft = "0.5rem";
       container.className = "toolbarButtonContainer btn";
 
       if (!userId) {
         container.textContent = "Incumbent: None";
         container.style.opacity = "0.75";
+        container.style.fontSize = "0.875";
       } else {
         const a = document.createElement("a");
         a.href = `/sf/liveprofile?selected_user=${encodeURIComponent(userId)}`;
@@ -1539,7 +1540,7 @@
       const title = toolbar.querySelector(".ectFCTitle");
 
       if (title) {
-        title.style.order = 0;
+        title.style.order = -1;
         title.after(container);
       } else {
         toolbar.prepend(container);
