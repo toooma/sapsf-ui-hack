@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.2.5
+// @version      1.2.6
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -41,6 +41,7 @@
     POSITION: "/xi/ui/ect/pages/positionMgmt/position.xhtml",
     MANAGE_DATA: "/xi/ui/genericobject/pages/mdf/mdf.xhtml",
     MY_WORKFLOW_REQUESTS: "/sf/myWorkflowRequests",
+    WORKFLOW_TODOS: "/xi/ui/peopleprofile/pages/workflow/todos.xhtml",
   };
 
   function getCurrentPathname() {
@@ -484,7 +485,11 @@
     },
     {
       id: "myWorkflowRequestEnrichment",
-      route: ROUTES.MY_WORKFLOW_REQUESTS,
+      route: location =>
+        [
+          ROUTES.MY_WORKFLOW_REQUESTS,
+          ROUTES.WORKFLOW_TODOS
+        ].includes(location.pathname),
       init: initMyWorkflowRequestEnrichment
     },
 
