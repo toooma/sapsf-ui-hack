@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.2.8
+// @version      1.2.9
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -71,6 +71,10 @@
       console.error(`❌ ${label} failed:`, err);
       return undefined;
     }
+  }
+
+  function toQueryString(params) {
+    return params.toString().replace(/\+/g, "%20");
   }
 
   async function fetchJson(url, options = {}) {
@@ -1810,7 +1814,7 @@
             });
 
             return fetchJson(
-              `/odata/v2/restricted/WfRequestStep?${params.toString()}`
+              `/odata/v2/restricted/WfRequestStep?${toQueryString(params)}`
             );
           })
         );
@@ -1854,7 +1858,7 @@
           });
 
           const data = await fetchJson(
-            `/rest/workforce/workflow/v1/wfRequests?${params.toString()}`
+            `/rest/workforce/workflow/v1/wfRequests?${toQueryString(params)}`
           );
 
           return new Map(
@@ -1897,7 +1901,7 @@
             });
 
             const data = await fetchJson(
-              `/odatav4/workforce/Workforce.svc/v1/WorkProfile?${params.toString()}`
+              `/odatav4/workforce/Workforce.svc/v1/WorkProfile?${toQueryString(params)}`
             );
 
             // Cache misses too, so they are not requested repeatedly.
