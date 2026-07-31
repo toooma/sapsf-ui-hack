@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.2.3
+// @version      1.2.4
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -40,6 +40,7 @@
     DOCUMENT_GENERATOR: "/xi/ui/documentgeneration/pages/generator.xhtml",
     POSITION: "/xi/ui/ect/pages/positionMgmt/position.xhtml",
     MANAGE_DATA: "/xi/ui/genericobject/pages/mdf/mdf.xhtml",
+    MY_WORKFLOW_REQUESTS: "/sf/myWorkflowRequests",
   };
 
   function getCurrentPathname() {
@@ -480,6 +481,11 @@
         [ROUTES.POSITION, ROUTES.MANAGE_DATA].includes(location.pathname) &&
         location.hash.includes("t=Position"),
       init: initPositionIncumbentLink
+    },
+    {
+      id: "myWorkflowRequestEnrichment",
+      route: ROUTES.MY_WORKFLOW_REQUESTS,
+      init: initMyWorkflowRequestEnrichment
     },
 
     /*
@@ -1666,6 +1672,247 @@
     }, timeoutMs);
 
     console.log("✅ Position incumbent watcher initialized.");
+  }
+
+  function initMyWorkflowRequestEnrichment() {
+    const timeoutMs = 15000;
+    let initialized = false;
+
+    function install(table) {
+      if (!table) return false;
+
+      // Already installed: refresh currently rendered rows.
+      if (table.__wfRequestEnrichment) {
+        table.__wfRequestEnrichment.refresh();
+        return true;
+      }
+
+      const state = {
+        // wfRequestId -> displayName; null means no completed processor was found.
+        processorByRequestId: new Map(),
+        pendingIds: new Set(),
+        refreshTimer: null
+      };
+
+      function addStyles() {
+        if (document.getElementById("wfRequestEnrichmentStyle")) return;
+
+        const style = document.createElement("style");
+        style.id = "wfRequestEnrichmentStyle";
+        style.textContent = `
+          .wfRequestEnrichment {
+            display: block;
+            margin-top: 0.35rem;
+            color: #526b84;
+            font: 0.75rem/1.35 monospace;
+            word-break: break-word;
+          }
+
+          .wfRequestEnrichment .wfProcessor {
+            font-family: "72", Arial, sans-serif;
+            color: #354a5f;
+          }
+        `;
+
+        document.head.appendChild(style);
+      }
+
+      function getVisibleRows() {
+        return table.getItems()
+          .map(item => {
+            const context = item.getBindingContext();
+            const row = item.getDomRef();
+
+            if (!context || !row) return null;
+
+            const wfRequestId = String(
+              context.getProperty("wfRequestNav/wfRequestUINav/wfRequestId") || ""
+            );
+
+            return wfRequestId ? { row, wfRequestId } : null;
+          })
+          .filter(Boolean);
+      }
+
+      function renderRows() {
+        getVisibleRows().forEach(({ row, wfRequestId }) => {
+          const cell = row.querySelector('td[aria-colindex="3"]');
+          if (!cell) return;
+
+          let info = cell.querySelector(".wfRequestEnrichment");
+          if (!info) {
+            info = document.createElement("div");
+            info.className = "wfRequestEnrichment";
+            cell.appendChild(info);
+          }
+
+          const processor = state.processorByRequestId.get(wfRequestId);
+
+          info.replaceChildren();
+
+          const idLine = document.createElement("div");
+          idLine.textContent = `WfRequestId: ${wfRequestId}`;
+          info.appendChild(idLine);
+
+          const processorLine = document.createElement("div");
+          processorLine.className = "wfProcessor";
+
+          if (state.pendingIds.has(wfRequestId)) {
+            processorLine.textContent = "Latest by: [Loading…]";
+          } else if (processor) {
+            processorLine.textContent = `Latest by: ${processor}`;
+          } else if (state.processorByRequestId.has(wfRequestId)) {
+            processorLine.textContent = "Latest by: —";
+          } else {
+            processorLine.textContent = "Latest by: [Loading…]";
+          }
+
+          info.appendChild(processorLine);
+        });
+      }
+
+      function escapeODataString(value) {
+        return String(value).replace(/'/g, "''");
+      }
+
+      async function fetchProcessors(ids) {
+        if (!ids.length) return;
+
+        ids.forEach(id => state.pendingIds.add(id));
+        renderRows();
+
+        const chunks = [];
+        for (let i = 0; i < ids.length; i += 80) {
+          chunks.push(ids.slice(i, i + 80));
+        }
+
+        try {
+          const responses = await Promise.all(
+            chunks.map(async chunk => {
+              const inValues = chunk
+                .map(id => `'${escapeODataString(id)}'`)
+                .join(",");
+
+              const filter =
+                `wfRequestId in ${inValues}` +
+                " and wfRequestNav/lastModifiedBy eq processedBy" +
+                " and status eq 'COMPLETED'";
+
+              const params = new URLSearchParams({
+                "$format": "json",
+                "$filter": filter,
+                "$expand": "processedByNav",
+                "$select": "wfRequestId,processedByNav/userId,processedByNav/displayName"
+              });
+
+              return fetchJson(
+                `/odata/v2/restricted/WfRequestStep?${params.toString()}`
+              );
+            })
+          );
+
+          // Cache IDs without a matching completed processor as null.
+          ids.forEach(id => state.processorByRequestId.set(id, null));
+
+          responses.forEach(payload => {
+            (payload?.d?.results || []).forEach(result => {
+              const id = String(result?.wfRequestId || "");
+              const displayName = result?.processedByNav?.displayName || null;
+
+              if (id) {
+                state.processorByRequestId.set(id, displayName);
+              }
+            });
+          });
+        } catch (err) {
+          console.error("❌ Could not load WfRequestStep processor details.", err);
+        } finally {
+          ids.forEach(id => state.pendingIds.delete(id));
+          renderRows();
+        }
+      }
+
+      function refresh() {
+        renderRows();
+
+        const idsToFetch = [
+          ...new Set(
+            getVisibleRows()
+              .map(({ wfRequestId }) => wfRequestId)
+              .filter(id =>
+                !state.processorByRequestId.has(id) &&
+                !state.pendingIds.has(id)
+              )
+          )
+        ];
+
+        fetchProcessors(idsToFetch);
+      }
+
+      function scheduleRefresh() {
+        clearTimeout(state.refreshTimer);
+        state.refreshTimer = setTimeout(refresh, 50);
+      }
+
+      addStyles();
+
+      table.attachUpdateFinished(scheduleRefresh);
+      table.addEventDelegate({
+        onAfterRendering: scheduleRefresh
+      });
+
+      table.__wfRequestEnrichment = { refresh, state };
+
+      refresh();
+      console.log("✅ WfRequestId / processed-by enrichment enabled.", table);
+
+      return true;
+    }
+
+    function tryInitialize() {
+      if (initialized) return true;
+
+      const Global = window.sap?.ui?.require;
+      if (typeof Global !== "function") return false;
+
+      window.sap.ui.require(
+        ["sap/sf/workflow/todos/Global"],
+        TodosGlobal => {
+          try {
+            const controller = TodosGlobal?.getGlobal("todosController");
+            const table = controller?.getView?.().byId("todosTable");
+
+            if (!table) return;
+            initialized = install(table);
+          } catch (err) {
+            console.error("❌ My Workflow Requests enrichment initialization failed:", err);
+          }
+        }
+      );
+
+      return false;
+    }
+
+    if (tryInitialize()) return;
+
+    const observer = new MutationObserver(() => {
+      if (tryInitialize() || initialized) {
+        observer.disconnect();
+      }
+    });
+
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+
+    setTimeout(() => {
+      observer.disconnect();
+
+      if (!initialized) {
+        console.warn("⚠️ My Workflow Requests table was not found.");
+      }
+    }, timeoutMs);
   }
 
 
