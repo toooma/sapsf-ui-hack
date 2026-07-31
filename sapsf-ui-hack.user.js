@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.2.7
+// @version      1.2.8
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -1679,6 +1679,7 @@
     console.log("✅ Position incumbent watcher initialized.");
   }
 
+
   function initMyWorkflowRequestEnrichment() {
     const timeoutMs = 15000;
     let initialized = false;
@@ -1686,17 +1687,17 @@
     function install(table) {
       if (!table) return false;
 
-      // Already installed: refresh currently rendered rows.
       if (table.__wfRequestEnrichment) {
         table.__wfRequestEnrichment.refresh();
         return true;
       }
 
       const state = {
-        // wfRequestId -> displayName; null means no completed processor was found.
         processorByRequestId: new Map(),
         pendingIds: new Set(),
-        refreshTimer: null
+        refreshTimer: null,
+        currentUserPendingRequestsPromise: null,
+        workProfileNameByAssignmentUuid: new Map()
       };
 
       function addStyles() {
@@ -1757,27 +1758,189 @@
 
           const idLine = document.createElement("div");
           idLine.textContent = `WfRequestId: ${wfRequestId}`;
-          info.appendChild(idLine);
 
           const processorLine = document.createElement("div");
           processorLine.className = "wfProcessor";
 
           if (state.pendingIds.has(wfRequestId)) {
-            processorLine.innerHTML = "Latest by: [Loading…]";
+            processorLine.textContent = "Latest by: [Loading…]";
           } else if (processor) {
-            processorLine.innerHTML = `Latest by: <strong>${processor}</strong>`;
+            processorLine.append("Latest by: ");
+
+            const strong = document.createElement("strong");
+            strong.textContent = processor;
+            processorLine.appendChild(strong);
           } else if (state.processorByRequestId.has(wfRequestId)) {
-            processorLine.innerHTML = "Latest by: —";
+            processorLine.textContent = "Latest by: —";
           } else {
-            processorLine.innerHTML = "Latest by: [Loading…]";
+            processorLine.textContent = "Latest by: [Loading…]";
           }
 
-          info.appendChild(processorLine);
+          info.append(idLine, processorLine);
         });
       }
 
       function escapeODataString(value) {
         return String(value).replace(/'/g, "''");
+      }
+
+      async function fetchProcessorsFromWfRequestStep(ids) {
+        const chunks = [];
+
+        for (let i = 0; i < ids.length; i += 80) {
+          chunks.push(ids.slice(i, i + 80));
+        }
+
+        const responses = await Promise.all(
+          chunks.map(async chunk => {
+            const inValues = chunk
+              .map(id => `'${escapeODataString(id)}'`)
+              .join(",");
+
+            const filter =
+              `wfRequestId in ${inValues}` +
+              " and wfRequestNav/lastModifiedBy eq processedBy" +
+              " and status eq 'COMPLETED'";
+
+            const params = new URLSearchParams({
+              "$format": "json",
+              "$filter": filter,
+              "$expand": "processedByNav",
+              "$select": "wfRequestId,processedByNav/userId,processedByNav/displayName"
+            });
+
+            return fetchJson(
+              `/odata/v2/restricted/WfRequestStep?${params.toString()}`
+            );
+          })
+        );
+
+        const foundIds = new Set();
+
+        responses.forEach(payload => {
+          (payload?.d?.results || []).forEach(result => {
+            const wfRequestId = String(result?.wfRequestId || "");
+            const displayName = result?.processedByNav?.displayName || null;
+
+            if (wfRequestId && displayName) {
+              state.processorByRequestId.set(wfRequestId, displayName);
+              foundIds.add(wfRequestId);
+            }
+          });
+        });
+
+        return foundIds;
+      }
+
+      async function fetchCurrentUserPendingRequests() {
+        if (state.currentUserPendingRequestsPromise) {
+          return state.currentUserPendingRequestsPromise;
+        }
+
+        state.currentUserPendingRequestsPromise = (async () => {
+          const currentUserAssignmentUUID =
+            window.pageHeaderJsonData?.userInfo?.assignmentUUID;
+
+          if (!currentUserAssignmentUUID) {
+            console.warn("⚠️ Current user assignmentUUID was not available.");
+            return new Map();
+          }
+
+          const params = new URLSearchParams({
+            "$filter":
+              `(createdAssignmentId eq '${escapeODataString(currentUserAssignmentUUID)}')` +
+              " and (status/code in ('PENDING'))",
+            "$select": "id,lastProcessedBy"
+          });
+
+          const data = await fetchJson(
+            `/rest/workforce/workflow/v1/wfRequests?${params.toString()}`
+          );
+
+          return new Map(
+            (data?.value || [])
+              .filter(item => item?.id && item?.lastProcessedBy)
+              .map(item => [String(item.id), item.lastProcessedBy])
+          );
+        })().catch(err => {
+          console.error("❌ Could not load current user's pending workflow requests.", err);
+          state.currentUserPendingRequestsPromise = null;
+          return new Map();
+        });
+
+        return state.currentUserPendingRequestsPromise;
+      }
+
+      async function fetchWorkProfileNames(assignmentUuids) {
+        const uncachedUuids = [
+          ...new Set(assignmentUuids.filter(uuid =>
+            uuid && !state.workProfileNameByAssignmentUuid.has(uuid)
+          ))
+        ];
+
+        if (!uncachedUuids.length) return;
+
+        const chunks = [];
+        for (let i = 0; i < uncachedUuids.length; i += 80) {
+          chunks.push(uncachedUuids.slice(i, i + 80));
+        }
+
+        await Promise.all(
+          chunks.map(async chunk => {
+            const filter = `(id in (${chunk
+              .map(uuid => `'${escapeODataString(uuid)}'`)
+              .join(",")}))`;
+
+            const params = new URLSearchParams({
+              "$select": "id,displayName",
+              "$filter": filter
+            });
+
+            const data = await fetchJson(
+              `/odatav4/workforce/Workforce.svc/v1/WorkProfile?${params.toString()}`
+            );
+
+            // Cache misses too, so they are not requested repeatedly.
+            chunk.forEach(uuid => state.workProfileNameByAssignmentUuid.set(uuid, null));
+
+            (data?.value || []).forEach(profile => {
+              if (profile?.id) {
+                state.workProfileNameByAssignmentUuid.set(
+                  profile.id,
+                  profile.displayName || null
+                );
+              }
+            });
+          })
+        );
+      }
+
+      async function fetchFallbackProcessors(idsWithoutWfRequestStepProcessor) {
+        if (!idsWithoutWfRequestStepProcessor.length) return;
+
+        const pendingRequestMap = await fetchCurrentUserPendingRequests();
+
+        const requestIdToAssignmentUuid = idsWithoutWfRequestStepProcessor
+          .map(wfRequestId => ({
+            wfRequestId,
+            assignmentUuid: pendingRequestMap.get(wfRequestId)
+          }))
+          .filter(item => item.assignmentUuid);
+
+        if (!requestIdToAssignmentUuid.length) return;
+
+        await fetchWorkProfileNames(
+          requestIdToAssignmentUuid.map(item => item.assignmentUuid)
+        );
+
+        requestIdToAssignmentUuid.forEach(({ wfRequestId, assignmentUuid }) => {
+          const displayName =
+            state.workProfileNameByAssignmentUuid.get(assignmentUuid) || null;
+
+          if (displayName) {
+            state.processorByRequestId.set(wfRequestId, displayName);
+          }
+        });
       }
 
       async function fetchProcessors(ids) {
@@ -1786,52 +1949,23 @@
         ids.forEach(id => state.pendingIds.add(id));
         renderRows();
 
-        const chunks = [];
-        for (let i = 0; i < ids.length; i += 80) {
-          chunks.push(ids.slice(i, i + 80));
-        }
-
         try {
-          const responses = await Promise.all(
-            chunks.map(async chunk => {
-              const inValues = chunk
-                .map(id => `'${escapeODataString(id)}'`)
-                .join(",");
+          const idsFoundInWfRequestStep = await fetchProcessorsFromWfRequestStep(ids);
 
-              const filter =
-                `wfRequestId in ${inValues}` +
-                " and wfRequestNav/lastModifiedBy eq processedBy" +
-                " and wfRequestNav/status ne null" +
-                " and status eq 'COMPLETED'";
-
-              const params = new URLSearchParams({
-                "$format": "json",
-                "$filter": filter,
-                "$expand": "processedByNav",
-                "$select": "wfRequestId,processedByNav/userId,processedByNav/displayName"
-              });
-
-              return fetchJson(
-                `/odata/v2/restricted/WfRequestStep?${params.toString()}`
-              );
-            })
+          const idsForFallback = ids.filter(
+            id => !idsFoundInWfRequestStep.has(id)
           );
 
-          // Cache IDs without a matching completed processor as null.
-          ids.forEach(id => state.processorByRequestId.set(id, null));
+          await fetchFallbackProcessors(idsForFallback);
 
-          responses.forEach(payload => {
-            (payload?.d?.results || []).forEach(result => {
-              const id = String(result?.wfRequestId || "");
-              const displayName = result?.processedByNav?.displayName || null;
-
-              if (id) {
-                state.processorByRequestId.set(id, displayName);
-              }
-            });
+          // Cache unresolved IDs as null.
+          ids.forEach(id => {
+            if (!state.processorByRequestId.has(id)) {
+              state.processorByRequestId.set(id, null);
+            }
           });
         } catch (err) {
-          console.error("❌ Could not load WfRequestStep processor details.", err);
+          console.error("❌ Could not load workflow processor details.", err);
         } finally {
           ids.forEach(id => state.pendingIds.delete(id));
           renderRows();
@@ -1878,8 +2012,7 @@
     function tryInitialize() {
       if (initialized) return true;
 
-      const Global = window.sap?.ui?.require;
-      if (typeof Global !== "function") return false;
+      if (typeof window.sap?.ui?.require !== "function") return false;
 
       window.sap.ui.require(
         ["sap/sf/workflow/todos/Global"],
