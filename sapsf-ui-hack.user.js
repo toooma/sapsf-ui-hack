@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.2.4
+// @version      1.2.5
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -1758,13 +1758,13 @@
           processorLine.className = "wfProcessor";
 
           if (state.pendingIds.has(wfRequestId)) {
-            processorLine.textContent = "Latest by: [Loading…]";
+            processorLine.innerHTML = "Latest by: [Loading…]";
           } else if (processor) {
-            processorLine.textContent = `Latest by: ${processor}`;
+            processorLine.innerHTML = `Latest by: <strong>${processor}</strong>`;
           } else if (state.processorByRequestId.has(wfRequestId)) {
-            processorLine.textContent = "Latest by: —";
+            processorLine.innerHTML = "Latest by: —";
           } else {
-            processorLine.textContent = "Latest by: [Loading…]";
+            processorLine.innerHTML = "Latest by: [Loading…]";
           }
 
           info.appendChild(processorLine);
