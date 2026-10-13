@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.3.8
+// @version      1.3.9
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -2217,6 +2217,8 @@
       const userInfo = window.pageHeaderJsonData?.userInfo || {};
       const budgets = getBudgetDetails();
 
+      const employeeSubgroup = withoutTrailingCodes(fieldValue("Employee Subgroup"));
+
       return {
         loggedInUser: {
           userName: userInfo.userName || null,
@@ -2235,14 +2237,18 @@
         "Dept/Unit": parenthesizedCode(fieldValue("Department")),
         "Budget Names": budgets.names,
         "Budget Codes": budgets.codes,
-        "Contract Type": withoutTrailingCodes(fieldValue("Employee Subgroup")),
+        "Contract Type": employeeSubgroup,
         "Entity": parenthesizedCode(fieldValue("Company")),
         "Job Title": fieldValue("Title"),
         "Position": fieldValue("Code"),
         "Start Date": normalizeDate(fieldValue("Contract Start Date")),
         "End Date": normalizeDate(fieldValue("Contract End Date")),
         "Compensation": withoutTrailingCodes(fieldValue("Payment Type")),
-        "Amount": normalizeAmount(fieldValue("Gross Contract Amount")),
+        "Amount": normalizeAmount(
+            employeeSubgroup === "Employee"
+              ? fieldValue("Annual / Monthly Salary Amount")
+              : fieldValue("Gross Contract Amount")
+          ),
         "Currency": parenthesizedCode(fieldValue("Currency")) || fieldValue("Currency"),
         "Notes": fieldValue("Description of Services")
       };
