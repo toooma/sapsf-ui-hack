@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.3.3
+// @version      1.3.4
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -2220,16 +2220,17 @@
     }
 
     function addExportButton() {
-      const title = [...document.querySelectorAll(".ectFCTitle")]
-        .find(el => text(el.querySelector('[role="heading"]')) === "Position");
+      const pageTitle = document.querySelector("h1#pageTitle");
 
-      if (!title || title.querySelector(`[${BUTTON_ATTR}]`)) return false;
+      if (!pageTitle || pageTitle.parentElement?.querySelector(`[${BUTTON_ATTR}]`)) {
+        return false;
+      }
 
       const button = document.createElement("button");
       button.type = "button";
       button.setAttribute(BUTTON_ATTR, "true");
       button.className = "fd-button fd-button--compact fd-button--transparent";
-      button.textContent = "Export workflow";
+      button.textContent = "Export Workflow";
       button.style.marginLeft = "0.75rem";
 
       button.addEventListener("click", async () => {
@@ -2246,7 +2247,7 @@
         }
       });
 
-      title.appendChild(button);
+      pageTitle.after(button);
       console.log("✅ Workflow Approval export button added.");
       return true;
     }
