@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.3.1
+// @version      1.3.3
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -2075,6 +2075,12 @@
       return el?.innerText?.replace(/\s+/g, " ").trim() || null;
     }
 
+    function withoutTrailingCodes(value) {
+      return value
+        ?.replace(/(?:\s*\([^)]+\))$/, "")
+        .trim() || null;
+    }
+
     function visible(el) {
       return el && !el.closest(".struck_label, [style*='display:none'], [style*='display: none']");
     }
@@ -2150,6 +2156,7 @@
       );
 
       const entries = [...(table?.querySelectorAll("tbody > tr") || [])]
+        .filter(row => row.cells?.[0]?.innerText?.trim() === "No")
         .map(row => text(row.cells?.[3]))
         .filter(Boolean);
 
@@ -2178,19 +2185,19 @@
         "Effective Date": normalizeDate(text(document.querySelector("#effectiveDate")) || fieldValue("Start Date")),
         "Change DateTime": getChangeDateTime(),
         "Changed By": fieldValue("Changed By"),
-        "Location": fieldValue("Location"),
-        "Job Class": fieldValue("Academic/Non-Academic"),
+        "Location": withoutTrailingCodes(fieldValue("Location")),
+        "Job Class": withoutTrailingCodes(fieldValue("Academic/Non-Academic")),
         "Full Name": fieldValue("Name of contractee"),
         "Dept/Unit": parenthesizedCode(fieldValue("Department")),
         "Budget Names": budgets.names,
         "Budget Codes": budgets.codes,
-        "Contract Type": fieldValue("Employee Subgroup"),
+        "Contract Type": withoutTrailingCodes(fieldValue("Employee Subgroup")),
         "Entity": parenthesizedCode(fieldValue("Company")),
         "Job Title": fieldValue("Title"),
         "Position": fieldValue("Code"),
         "Start Date": normalizeDate(fieldValue("Contract Start Date")),
         "End Date": normalizeDate(fieldValue("Contract End Date")),
-        "Compensation": fieldValue("Payment Type"),
+        "Compensation": withoutTrailingCodes(fieldValue("Payment Type")),
         "Amount": fieldValue("Gross Contract Amount"),
         "Currency": parenthesizedCode(fieldValue("Currency")) || fieldValue("Currency"),
         "Notes": fieldValue("Description of Services")
