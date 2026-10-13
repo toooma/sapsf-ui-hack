@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.4.0
+// @version      1.4.1
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -2302,7 +2302,7 @@
       const button = document.createElement("button");
       button.type = "button";
       button.setAttribute(BUTTON_ATTR, "true");
-      button.className = "fd-button fd-button--compact fd-button--transparent";
+      button.className = "fd-button fd-button--compact fd-button--attention";
       button.textContent = "Export Workflow";
       button.style.marginLeft = "0.75rem";
 
@@ -2325,15 +2325,18 @@
 
       getWorkflowApprovalExportTrackerUrl()
         .then(url => {
-          const link = document.createElement("a");
-          link.href = url;
-          link.target = "_blank";
-          link.rel = "noopener noreferrer";
-          link.textContent = "Open your tracker..";
-          link.style.marginLeft = "0.75rem";
-          button.after(link);
+          const trackerButton = document.createElement("button");
+          trackerButton.type = "button";
+          trackerButton.setAttribute("data-sapsf-ui-hack-workflow-tracker", "true");
+          trackerButton.className = "fd-button fd-button--compact fd-button--transparent";
+          trackerButton.textContent = "Open xls tracker";
+          trackerButton.style.marginLeft = "0.75rem";
+          trackerButton.addEventListener("click", () => {
+            window.open(url, "_blank", "noopener,noreferrer");
+          });
+          button.after(trackerButton);
         })
-        .catch(err => console.error("Could not add workflow tracker link:", err));
+        .catch(err => console.error("Could not add workflow tracker button:", err));
 
       return true;
     }
