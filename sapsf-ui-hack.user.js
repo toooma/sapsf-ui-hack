@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.2.9
+// @version      1.3.0
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -42,6 +42,7 @@
     MANAGE_DATA: "/xi/ui/genericobject/pages/mdf/mdf.xhtml",
     MY_WORKFLOW_REQUESTS: "/sf/myWorkflowRequests",
     WORKFLOW_TODOS: "/xi/ui/peopleprofile/pages/workflow/todos.xhtml",
+    WORKFLOW_APPROVAL: "/xi/ui/ect/pages/workflowApproval/ectWorkflowApproval.xhtml",
   };
 
   function getCurrentPathname() {
@@ -495,6 +496,11 @@
           ROUTES.WORKFLOW_TODOS
         ].includes(location.pathname),
       init: initMyWorkflowRequestEnrichment
+    },
+    {
+      id: "workflowApprovalExport",
+      route: ROUTES.WORKFLOW_APPROVAL,
+      init: initWorkflowApprovalExport
     },
 
     /*
@@ -2058,6 +2064,201 @@
     }, timeoutMs);
   }
 
+
+
+  function initWorkflowApprovalExport() {
+    const BUTTON_ATTR = "data-sapsf-ui-hack-workflow-export";
+    const ENDPOINT =
+      "https://defaultd9c4591376534be2920bbdb0386381.84.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/25/workflows/a71b7fa3bf084410a331bb857ef0c1ad/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=qwcY0rrXXMLLd4OB-TyKwi7yy4NYDBm1j6HM_3uXBKA";
+
+    function text(el) {
+      return el?.textContent?.replace(/\s+/g, " ").trim() || null;
+    }
+
+    function visible(el) {
+      return el && !el.closest(".struck_label, [style*='display:none'], [style*='display: none']");
+    }
+
+    function fieldValue(label) {
+      const row = [...document.querySelectorAll("tr.form_field")].find(row =>
+        text(row.querySelector("td.field_label .text")) === label
+      );
+
+      if (!row) return null;
+
+      const values = [...row.querySelectorAll("td.field_value .readComp, td.field_value .read_only")]
+        .filter(visible)
+        .map(text)
+        .filter(Boolean);
+
+      return values[0] || null;
+    }
+
+    function parenthesizedCode(value) {
+      return value?.match(/\(([^)]+)\)\s*$/)?.[1] || null;
+    }
+
+    function nameBeforeCode(value) {
+      return value?.replace(/\s*\([^)]+\)\s*$/, "").trim() || null;
+    }
+
+    function normalizeDate(value) {
+      if (!value) return null;
+
+      const dmy = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (dmy) {
+        const [, day, month, year] = dmy;
+        return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+      }
+
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString().slice(0, 10);
+    }
+
+    function normalizeDateTime(value) {
+      if (!value) return null;
+
+      const match = value.match(
+        /(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})(?:\s+UTC([+-])(\d{1,2}):?(\d{2})?)?/
+      );
+
+      if (!match) {
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+      }
+
+      const [, day, month, year, hour, minute, second, sign, offsetHour = "0", offsetMinute = "0"] = match;
+      const offsetMinutes =
+        (Number(offsetHour) * 60 + Number(offsetMinute)) * (sign === "-" ? -1 : 1);
+
+      return new Date(
+        Date.UTC(year, Number(month) - 1, day, hour, minute, second) - offsetMinutes * 60000
+      ).toISOString();
+    }
+
+    function getChangeDateTime() {
+      const row = [...document.querySelectorAll("tr.form_field")].find(row =>
+        text(row.querySelector("td.field_label .text")) === "Change Date"
+      );
+
+      return normalizeDateTime(text(row?.querySelector("td.field_value")));
+    }
+
+    function getBudgetDetails() {
+      const table = [...document.querySelectorAll("table.dataGridLayout")].find(table =>
+        table.getAttribute("aria-label") === "Budget Code Level Salary / Fee Allocation"
+      );
+
+      const entries = [...(table?.querySelectorAll("tbody > tr") || [])]
+        .map(row => text(row.cells?.[3]))
+        .filter(Boolean);
+
+      return {
+        names: entries.map(nameBeforeCode).filter(Boolean).join("; ") || null,
+        codes: entries.map(parenthesizedCode).filter(Boolean).join("; ") || null
+      };
+    }
+
+    function scrapeWorkflowApprovalData() {
+      const workflowRequestId =
+        new URLSearchParams(window.location.search).get("workflowRequestId");
+
+      const userInfo = window.pageHeaderJsonData?.userInfo || {};
+      const budgets = getBudgetDetails();
+
+      return {
+        loggedInUser: {
+          userName: userInfo.userName || null,
+          id: userInfo.id || null,
+          fullName: userInfo.fullName || null
+        },
+        WfRequest: workflowRequestId
+          ? `${window.location.origin}/sf/hrisworkflowapprovelink?workflowRequestId=${encodeURIComponent(workflowRequestId)}&company=ceu`
+          : null,
+        "Effective Date": normalizeDate(text(document.querySelector("#effectiveDate")) || fieldValue("Start Date")),
+        "Change DateTime": getChangeDateTime(),
+        "Changed By": fieldValue("Changed By"),
+        "Location": fieldValue("Location"),
+        "Job Class": fieldValue("Academic/Non-Academic"),
+        "Full Name": fieldValue("Name of contractee"),
+        "Dept/Unit": parenthesizedCode(fieldValue("Department")),
+        "Budget Names": budgets.names,
+        "Budget Codes": budgets.codes,
+        "Contract Type": fieldValue("Employee Subgroup"),
+        "Entity": parenthesizedCode(fieldValue("Company")),
+        "Job Title": fieldValue("Title"),
+        "Position": fieldValue("Code"),
+        "Start Date": normalizeDate(fieldValue("Contract Start Date")),
+        "End Date": normalizeDate(fieldValue("Contract End Date")),
+        "Compensation": fieldValue("Payment Type"),
+        "Amount": fieldValue("Gross Contract Amount"),
+        "Currency": parenthesizedCode(fieldValue("Currency")) || fieldValue("Currency"),
+        "Notes": fieldValue("Description of Services")
+      };
+    }
+
+    async function postWorkflowApprovalData(data) {
+      const response = await originalFetch(ENDPOINT, {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Workflow export failed: ${response.status} ${response.statusText}`);
+      }
+
+      return response;
+    }
+
+    function addExportButton() {
+      const title = [...document.querySelectorAll(".ectFCTitle")]
+        .find(el => text(el.querySelector('[role="heading"]')) === "Position");
+
+      if (!title || title.querySelector(`[${BUTTON_ATTR}]`)) return false;
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.setAttribute(BUTTON_ATTR, "true");
+      button.className = "fd-button fd-button--compact fd-button--transparent";
+      button.textContent = "Export workflow";
+      button.style.marginLeft = "0.75rem";
+
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        button.textContent = "Exporting…";
+
+        try {
+          await postWorkflowApprovalData(scrapeWorkflowApprovalData());
+          button.textContent = "Exported ✓";
+        } catch (err) {
+          console.error("Workflow export failed:", err);
+          button.textContent = "Export failed";
+          button.disabled = false;
+        }
+      });
+
+      title.appendChild(button);
+      console.log("✅ Workflow Approval export button added.");
+      return true;
+    }
+
+    window.sapSfUiHackWorkflowApproval = {
+      scrape: scrapeWorkflowApprovalData,
+      post: () => postWorkflowApprovalData(scrapeWorkflowApprovalData())
+    };
+
+    if (addExportButton()) return;
+
+    const observer = new MutationObserver(() => {
+      if (addExportButton()) observer.disconnect();
+    });
+
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  
 
 
   /**************************************************************************
