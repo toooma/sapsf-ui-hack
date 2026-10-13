@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.4.1
+// @version      1.4.2
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -2097,27 +2097,45 @@
       return workflowApprovalExportEndpointPromise;
     }
 
-    let workflowApprovalExportTrackerBaseUrlPromise = null;
-    function getWorkflowApprovalExportTrackerUrl() {
-      if (!workflowApprovalExportTrackerBaseUrlPromise) {
-        workflowApprovalExportTrackerBaseUrlPromise = fetchJson(
-          "/odata/v2/cust_IntegrationConfig('workflowExportLinkBaseUrl')?$format=json&$select=cust_endpointUrl"
+    let workflowApprovalTrackerEndpointPromise = null;
+    function getWorkflowApprovalTrackerEndpoint() {
+      if (!workflowApprovalTrackerEndpointPromise) {
+        workflowApprovalTrackerEndpointPromise = fetchJson(
+          "/odata/v2/cust_IntegrationConfig('workflowExportUrl')?$format=json&$select=cust_endpointUrl"
         )
           .then(data => data?.d?.cust_endpointUrl)
-          .then(baseUrl => {
-            if (!baseUrl) throw new Error("Workflow tracker base URL is not configured.");
-
-            const userName = window.pageHeaderJsonData?.userInfo?.userName;
-            const fileName = `${userName?.split("@")[0] || "unknown"}.xlsx`;
-
-            return baseUrl.replace("[fileName]", encodeURIComponent(fileName));
+          .then(endpoint => {
+            if (!endpoint) {
+              throw new Error(
+                'Missing cust_endpointUrl for IntegrationConfig "workflowExportUrl".'
+              );
+            }
+            return endpoint;
           })
           .catch(err => {
-            workflowApprovalExportTrackerBaseUrlPromise = null;
+            workflowApprovalTrackerEndpointPromise = null;
             throw err;
           });
       }
-      return workflowApprovalExportTrackerBaseUrlPromise;
+      return workflowApprovalTrackerEndpointPromise;
+    }
+    async function getWorkflowApprovalTrackerLink(loggedInUser) {
+      const endpoint = await getWorkflowApprovalTrackerEndpoint();
+      const response = await originalFetch(endpoint, {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(loggedInUser)
+      });
+      // A missing tracker (for example HTTP 404) means no buttons are added.
+      if (!response.ok) {
+        console.warn(
+          `Workflow tracker is unavailable: ${response.status} ${response.statusText}`
+        );
+        return null;
+      }
+      const data = await response.json().catch(() => null);
+      return data?.d?.LinkingUri || null;
     }
 
     function text(el) {
@@ -2292,7 +2310,7 @@
       return response;
     }
 
-    function addExportButton() {
+    function addExportButton(trackerUrl) {
       const pageTitle = document.querySelector("h1#pageTitle");
 
       if (!pageTitle || pageTitle.parentElement?.querySelector(`[${BUTTON_ATTR}]`)) {
@@ -2323,20 +2341,16 @@
       pageTitle.appendChild(button);
       console.log("✅ Workflow Approval export button added.");
 
-      getWorkflowApprovalExportTrackerUrl()
-        .then(url => {
-          const trackerButton = document.createElement("button");
-          trackerButton.type = "button";
-          trackerButton.setAttribute("data-sapsf-ui-hack-workflow-tracker", "true");
-          trackerButton.className = "fd-button fd-button--compact fd-button--transparent";
-          trackerButton.textContent = "Open xls tracker";
-          trackerButton.style.marginLeft = "0.75rem";
-          trackerButton.addEventListener("click", () => {
-            window.open(url, "_blank", "noopener,noreferrer");
-          });
-          button.after(trackerButton);
-        })
-        .catch(err => console.error("Could not add workflow tracker button:", err));
+      const trackerButton = document.createElement("button");
+      trackerButton.type = "button";
+      trackerButton.setAttribute("data-sapsf-ui-hack-workflow-tracker", "true");
+      trackerButton.className = "fd-button fd-button--compact fd-button--transparent";
+      trackerButton.textContent = "Open XLS Tracker";
+      trackerButton.style.marginLeft = "0.5rem";
+      trackerButton.addEventListener("click", () => {
+        window.open(trackerUrl, "_blank", "noopener,noreferrer");
+      });
+      button.after(trackerButton);
 
       return true;
     }
@@ -2346,13 +2360,44 @@
       post: () => postWorkflowApprovalData(scrapeWorkflowApprovalData())
     };
 
-    if (addExportButton()) return;
+    let initializationStarted = false;
+    let trackerUrl = null;
+
+    async function initializeButtons() {
+      if (initializationStarted) return false;
+      initializationStarted = true;
+      try {
+        const loggedInUser = window.pageHeaderJsonData?.userInfo || {};
+        trackerUrl = await getWorkflowApprovalTrackerLink({
+          userName: loggedInUser.userName || null,
+          id: loggedInUser.id || null,
+          fullName: loggedInUser.fullName || null
+        });
+        if (!trackerUrl) {
+          console.warn("⚠️ Workflow tracker LinkingUri was not returned; export buttons will not be added.");
+          return false;
+        }
+        return addExportButton(trackerUrl);
+      } catch (err) {
+        console.error("Could not initialize workflow export buttons:", err);
+        return false;
+      }
+    }
 
     const observer = new MutationObserver(() => {
-      if (addExportButton()) observer.disconnect();
+      if (!document.querySelector("h1#pageTitle")) return;
+      observer.disconnect();
+      initializeButtons();
     });
 
-    observer.observe(document.documentElement, { childList: true, subtree: true });
+    if (document.querySelector("h1#pageTitle")) {
+      initializeButtons();
+    } else {
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true
+      });
+    }
   }
 
   
