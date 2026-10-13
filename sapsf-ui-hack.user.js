@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.3.0
+// @version      1.3.1
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -2072,7 +2072,7 @@
       "https://defaultd9c4591376534be2920bbdb0386381.84.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/25/workflows/a71b7fa3bf084410a331bb857ef0c1ad/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=qwcY0rrXXMLLd4OB-TyKwi7yy4NYDBm1j6HM_3uXBKA";
 
     function text(el) {
-      return el?.textContent?.replace(/\s+/g, " ").trim() || null;
+      return el?.innerText?.replace(/\s+/g, " ").trim() || null;
     }
 
     function visible(el) {
