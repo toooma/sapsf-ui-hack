@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.3.4
+// @version      1.3.5
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -2247,7 +2247,7 @@
         }
       });
 
-      pageTitle.after(button);
+      pageTitle.appendChild(button);
       console.log("✅ Workflow Approval export button added.");
       return true;
     }
