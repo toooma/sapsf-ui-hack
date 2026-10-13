@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.3.7
+// @version      1.3.8
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -2135,35 +2135,55 @@
       return value?.replace(/\s*\([^)]+\)\s*$/, "").trim() || null;
     }
 
-    function normalizeDate(value) {
+    function normalizeAmount(value) {
       if (!value) return null;
 
+      let raw = String(value).replace(/[^\d,.-]/g, "");
+      const lastComma = raw.lastIndexOf(",");
+      const lastDot = raw.lastIndexOf(".");
+
+      if (lastComma !== -1 && lastDot !== -1) {
+        // Last separator is decimal: 1,234.56 or 1.234,56
+        const decimalSeparator = lastComma > lastDot ? "," : ".";
+        const groupingSeparator = decimalSeparator === "," ? "." : ",";
+        raw = raw
+          .split(groupingSeparator).join("")
+          .replace(decimalSeparator, ".");
+      } else if (lastComma !== -1 || lastDot !== -1) {
+        const separator = lastComma !== -1 ? "," : ".";
+        const digitsAfter = raw.length - raw.lastIndexOf(separator) - 1;
+        // A single separator followed by exactly 3 digits is treated as grouping.
+        raw = digitsAfter === 3
+          ? raw.split(separator).join("")
+          : raw.replace(separator, ".");
+      }
+      const amount = Number(raw);
+      return Number.isFinite(amount) ? amount.toFixed(2) : value;
+    }
+
+    function normalizeDate(value) {
+      if (!value) return null;
       const dmy = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
       if (dmy) {
         const [, day, month, year] = dmy;
         return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
       }
-
       const parsed = new Date(value);
       return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString().slice(0, 10);
     }
 
     function normalizeDateTime(value) {
       if (!value) return null;
-
       const match = value.match(
         /(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})(?:\s+UTC([+-])(\d{1,2}):?(\d{2})?)?/
       );
-
       if (!match) {
         const parsed = new Date(value);
         return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
       }
-
       const [, day, month, year, hour, minute, second, sign, offsetHour = "0", offsetMinute = "0"] = match;
       const offsetMinutes =
         (Number(offsetHour) * 60 + Number(offsetMinute)) * (sign === "-" ? -1 : 1);
-
       return new Date(
         Date.UTC(year, Number(month) - 1, day, hour, minute, second) - offsetMinutes * 60000
       ).toISOString();
@@ -2173,7 +2193,6 @@
       const row = [...document.querySelectorAll("tr.form_field")].find(row =>
         text(row.querySelector("td.field_label .text")) === "Change Date"
       );
-
       return normalizeDateTime(text(row?.querySelector("td.field_value")));
     }
 
@@ -2181,12 +2200,10 @@
       const table = [...document.querySelectorAll("table.dataGridLayout")].find(table =>
         table.getAttribute("aria-label") === "Budget Code Level Salary / Fee Allocation"
       );
-
       const entries = [...(table?.querySelectorAll("tbody > tr") || [])]
         .filter(row => row.cells?.[0]?.innerText?.trim() === "No")
         .map(row => text(row.cells?.[3]))
         .filter(Boolean);
-
       return {
         names: entries.map(nameBeforeCode).filter(Boolean).join("; ") || null,
         codes: entries.map(parenthesizedCode).filter(Boolean).join("; ") || null
@@ -2207,7 +2224,7 @@
           fullName: userInfo.fullName || null
         },
         WfRequest: workflowRequestId
-          ? `${window.location.origin}/sf/hrisworkflowapprovelink?workflowRequestId=${encodeURIComponent(workflowRequestId)}&company=ceu`
+          ? `${window.location.origin}/sf/hrisworkflowapprovelink?workflowRequestId=${encodeURIComponent(workflowRequestId)}`
           : null,
         "Effective Date": normalizeDate(text(document.querySelector("#effectiveDate")) || fieldValue("Start Date")),
         "Change DateTime": getChangeDateTime(),
@@ -2225,7 +2242,7 @@
         "Start Date": normalizeDate(fieldValue("Contract Start Date")),
         "End Date": normalizeDate(fieldValue("Contract End Date")),
         "Compensation": withoutTrailingCodes(fieldValue("Payment Type")),
-        "Amount": fieldValue("Gross Contract Amount"),
+        "Amount": normalizeAmount(fieldValue("Gross Contract Amount")),
         "Currency": parenthesizedCode(fieldValue("Currency")) || fieldValue("Currency"),
         "Notes": fieldValue("Description of Services")
       };
