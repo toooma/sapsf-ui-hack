@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.3.9
+// @version      1.4.0
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -2075,7 +2075,6 @@
     const BUTTON_ATTR = "data-sapsf-ui-hack-workflow-export";
 
     let workflowApprovalExportEndpointPromise = null;
-
     function getWorkflowApprovalExportEndpoint() {
       if (!workflowApprovalExportEndpointPromise) {
         workflowApprovalExportEndpointPromise = fetchJson(
@@ -2096,6 +2095,29 @@
           });
       }
       return workflowApprovalExportEndpointPromise;
+    }
+
+    let workflowApprovalExportTrackerBaseUrlPromise = null;
+    function getWorkflowApprovalExportTrackerUrl() {
+      if (!workflowApprovalExportTrackerBaseUrlPromise) {
+        workflowApprovalExportTrackerBaseUrlPromise = fetchJson(
+          "/odata/v2/cust_IntegrationConfig('workflowExportLinkBaseUrl')?$format=json&$select=cust_endpointUrl"
+        )
+          .then(data => data?.d?.cust_endpointUrl)
+          .then(baseUrl => {
+            if (!baseUrl) throw new Error("Workflow tracker base URL is not configured.");
+
+            const userName = window.pageHeaderJsonData?.userInfo?.userName;
+            const fileName = `${userName?.split("@")[0] || "unknown"}.xlsx`;
+
+            return baseUrl.replace("[fileName]", encodeURIComponent(fileName));
+          })
+          .catch(err => {
+            workflowApprovalExportTrackerBaseUrlPromise = null;
+            throw err;
+          });
+      }
+      return workflowApprovalExportTrackerBaseUrlPromise;
     }
 
     function text(el) {
@@ -2300,6 +2322,19 @@
 
       pageTitle.appendChild(button);
       console.log("✅ Workflow Approval export button added.");
+
+      getWorkflowApprovalExportTrackerUrl()
+        .then(url => {
+          const link = document.createElement("a");
+          link.href = url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = "Open your tracker..";
+          link.style.marginLeft = "0.75rem";
+          button.after(link);
+        })
+        .catch(err => console.error("Could not add workflow tracker link:", err));
+
       return true;
     }
 
