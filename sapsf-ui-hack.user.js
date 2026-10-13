@@ -2069,7 +2069,7 @@
   function initWorkflowApprovalExport() {
     const BUTTON_ATTR = "data-sapsf-ui-hack-workflow-export";
     const ENDPOINT =
-      "https://defaultd9c4591376534be2920bbdb0386381.84.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/25/workflows/a71b7fa3bf084410a331bb857ef0c1ad/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=qwcY0rrXXMLLd4OB-TyKwi7yy4NYDBm1j6HM_3uXBKA";
+      "...";
 
     function text(el) {
       return el?.innerText?.replace(/\s+/g, " ").trim() || null;
