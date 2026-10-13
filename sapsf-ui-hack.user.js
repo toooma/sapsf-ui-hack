@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.3.6
+// @version      1.3.7
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -43,6 +43,7 @@
     MY_WORKFLOW_REQUESTS: "/sf/myWorkflowRequests",
     WORKFLOW_TODOS: "/xi/ui/peopleprofile/pages/workflow/todos.xhtml",
     WORKFLOW_APPROVAL: "/xi/ui/ect/pages/workflowApproval/ectWorkflowApproval.xhtml",
+    WORKFLOW_APPROVAL_LINK: "/sf/hrisworkflowapprovelink",
   };
 
   function getCurrentPathname() {
@@ -499,7 +500,11 @@
     },
     {
       id: "workflowApprovalExport",
-      route: ROUTES.WORKFLOW_APPROVAL,
+      route: location =>
+        [
+          ROUTES.WORKFLOW_APPROVAL,
+          ROUTES.WORKFLOW_APPROVAL_LINK
+        ].includes(location.pathname),
       init: initWorkflowApprovalExport
     },
 
