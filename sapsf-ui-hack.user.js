@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.3.5
+// @version      1.3.6
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -2068,8 +2068,30 @@
 
   function initWorkflowApprovalExport() {
     const BUTTON_ATTR = "data-sapsf-ui-hack-workflow-export";
-    const ENDPOINT =
-      "...";
+
+    let workflowApprovalExportEndpointPromise = null;
+
+    function getWorkflowApprovalExportEndpoint() {
+      if (!workflowApprovalExportEndpointPromise) {
+        workflowApprovalExportEndpointPromise = fetchJson(
+          "/odata/v2/cust_IntegrationConfig('workflowExport')?$format=json&$select=cust_endpointUrl"
+        )
+          .then(data => data?.d?.cust_endpointUrl)
+          .then(endpoint => {
+            if (!endpoint) {
+              throw new Error(
+                'Missing cust_endpointUrl for IntegrationConfig "workflowExport".'
+              );
+            }
+            return endpoint;
+          })
+          .catch(err => {
+            workflowApprovalExportEndpointPromise = null;
+            throw err;
+          });
+      }
+      return workflowApprovalExportEndpointPromise;
+    }
 
     function text(el) {
       return el?.innerText?.replace(/\s+/g, " ").trim() || null;
@@ -2205,7 +2227,8 @@
     }
 
     async function postWorkflowApprovalData(data) {
-      const response = await originalFetch(ENDPOINT, {
+      const endpoint = await getWorkflowApprovalExportEndpoint();
+      const response = await originalFetch(endpoint, {
         method: "POST",
         mode: "cors",
         headers: { "Content-Type": "application/json" },
