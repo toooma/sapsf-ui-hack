@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.4.2
+// @version      1.4.3
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -2175,32 +2175,6 @@
       return value?.replace(/\s*\([^)]+\)\s*$/, "").trim() || null;
     }
 
-    function normalizeAmount(value) {
-      if (!value) return null;
-
-      let raw = String(value).replace(/[^\d,.-]/g, "");
-      const lastComma = raw.lastIndexOf(",");
-      const lastDot = raw.lastIndexOf(".");
-
-      if (lastComma !== -1 && lastDot !== -1) {
-        // Last separator is decimal: 1,234.56 or 1.234,56
-        const decimalSeparator = lastComma > lastDot ? "," : ".";
-        const groupingSeparator = decimalSeparator === "," ? "." : ",";
-        raw = raw
-          .split(groupingSeparator).join("")
-          .replace(decimalSeparator, ".");
-      } else if (lastComma !== -1 || lastDot !== -1) {
-        const separator = lastComma !== -1 ? "," : ".";
-        const digitsAfter = raw.length - raw.lastIndexOf(separator) - 1;
-        // A single separator followed by exactly 3 digits is treated as grouping.
-        raw = digitsAfter === 3
-          ? raw.split(separator).join("")
-          : raw.replace(separator, ".");
-      }
-      const amount = Number(raw);
-      return Number.isFinite(amount) ? amount.toFixed(2) : value;
-    }
-
     function normalizeDate(value) {
       if (!value) return null;
       const dmy = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
@@ -2240,24 +2214,63 @@
       const table = [...document.querySelectorAll("table.dataGridLayout")].find(table =>
         table.getAttribute("aria-label") === "Budget Code Level Salary / Fee Allocation"
       );
-      const entries = [...(table?.querySelectorAll("tbody > tr") || [])]
+      return [...(table?.querySelectorAll("tbody > tr") || [])]
         .filter(row => row.cells?.[0]?.innerText?.trim() === "No")
         .map(row => text(row.cells?.[3]))
-        .filter(Boolean);
-      return {
-        names: entries.map(nameBeforeCode).filter(Boolean).join("; ") || null,
-        codes: entries.map(parenthesizedCode).filter(Boolean).join("; ") || null
-      };
+        .filter(Boolean)
+        .map(value => ({
+          name: nameBeforeCode(value),
+          code: parenthesizedCode(value)
+      }));
     }
 
-    function scrapeWorkflowApprovalData() {
+    async function fetchIncumbentUserId(positionCode, effectiveDate) {
+      if (!positionCode) return null;
+      const params = new URLSearchParams({
+        "$format": "json",
+        "$filter":
+          `position eq '${String(positionCode).replace(/'/g, "''")}'` +
+          ` and (employmentNav/endDate eq null or employmentNav/endDate ge '${effectiveDate || today}')`,
+        "$select": "userId",
+        "fromDate": effectiveDate || today
+      });
+      const data = await fetchJson(
+        `/odata/v2/restricted/EmpJob?${toQueryString(params)}`
+      );
+      return data?.d?.results?.[0]?.userId || null;
+    }
+
+    async function fetchUserDisplayName(userId) {
+      if (!userId) return null;
+      const data = await fetchJson(
+        `/odata/v2/restricted/User(%27${encodeURIComponent(userId)}%27)?%24format=json&%24select=displayName`
+      );
+      return data?.d?.displayName || null;
+    }
+
+    async function scrapeWorkflowApprovalData() {
       const workflowRequestId =
         new URLSearchParams(window.location.search).get("workflowRequestId");
 
       const userInfo = window.pageHeaderJsonData?.userInfo || {};
       const budgets = getBudgetDetails();
-
       const employeeSubgroup = withoutTrailingCodes(fieldValue("Employee Subgroup"));
+      const effectiveDate = normalizeDate(
+        text(document.querySelector("#effectiveDate")) || fieldValue("Start Date")
+      );
+      const positionCode = fieldValue("Code");
+      let contracteeName = fieldValue("Name of contractee");
+      if (!contracteeName?.trim()) {
+        try {
+          const incumbentUserId = await fetchIncumbentUserId(
+            positionCode,
+            effectiveDate
+          );
+          contracteeName = await fetchUserDisplayName(incumbentUserId);
+        } catch (err) {
+          console.warn("Could not resolve incumbent as contractee:", err);
+        }
+      }
 
       return {
         loggedInUser: {
@@ -2268,28 +2281,27 @@
         WfRequest: workflowRequestId
           ? `${window.location.origin}/sf/hrisworkflowapprovelink?workflowRequestId=${encodeURIComponent(workflowRequestId)}`
           : null,
-        "Effective Date": normalizeDate(text(document.querySelector("#effectiveDate")) || fieldValue("Start Date")),
+        "Effective Date": effectiveDate,
         "Change DateTime": getChangeDateTime(),
         "Changed By": fieldValue("Changed By"),
         "Location": withoutTrailingCodes(fieldValue("Location")),
         "Job Class": withoutTrailingCodes(fieldValue("Academic/Non-Academic")),
-        "Full Name": fieldValue("Name of contractee"),
+        "Full Name": contracteeName || null,
         "Dept/Unit": parenthesizedCode(fieldValue("Department")),
-        "Budget Names": budgets.names,
-        "Budget Codes": budgets.codes,
+        "HR Partner": userInfo.fullName || null,
         "Contract Type": employeeSubgroup,
         "Entity": parenthesizedCode(fieldValue("Company")),
         "Job Title": fieldValue("Title"),
-        "Position": fieldValue("Code"),
+        "Position": positionCode,
         "Start Date": normalizeDate(fieldValue("Contract Start Date")),
         "End Date": normalizeDate(fieldValue("Contract End Date")),
         "Compensation": withoutTrailingCodes(fieldValue("Payment Type")),
-        "Amount": normalizeAmount(
-            employeeSubgroup === "Employee"
-              ? fieldValue("Annual / Monthly Salary Amount")
-              : fieldValue("Gross Contract Amount")
-          ),
-        "Currency": parenthesizedCode(fieldValue("Currency")) || fieldValue("Currency"),
+        "Amount": [
+          parenthesizedCode(fieldValue("Currency")) || fieldValue("Currency"),
+          employeeSubgroup === "Employee"
+            ? fieldValue("Annual / Monthly Salary Amount")
+            : fieldValue("Gross Contract Amount")
+        ].filter(Boolean).join(" ") || null,
         "Notes": fieldValue("Description of Services")
       };
     }
@@ -2329,7 +2341,7 @@
         button.textContent = "Exporting…";
 
         try {
-          await postWorkflowApprovalData(scrapeWorkflowApprovalData());
+          await postWorkflowApprovalData(await scrapeWorkflowApprovalData());
           button.textContent = "Exported ✓";
         } catch (err) {
           console.error("Workflow export failed:", err);
@@ -2357,7 +2369,7 @@
 
     window.sapSfUiHackWorkflowApproval = {
       scrape: scrapeWorkflowApprovalData,
-      post: () => postWorkflowApprovalData(scrapeWorkflowApprovalData())
+      post: async () => postWorkflowApprovalData(await scrapeWorkflowApprovalData())
     };
 
     let initializationStarted = false;
