@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.4.3
+// @version      1.4.4
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -2156,14 +2156,11 @@
       const row = [...document.querySelectorAll("tr.form_field")].find(row =>
         text(row.querySelector("td.field_label .text")) === label
       );
-
       if (!row) return null;
-
       const values = [...row.querySelectorAll("td.field_value .readComp, td.field_value .read_only")]
         .filter(visible)
         .map(text)
         .filter(Boolean);
-
       return values[0] || null;
     }
 
@@ -2249,9 +2246,7 @@
     }
 
     async function scrapeWorkflowApprovalData() {
-      const workflowRequestId =
-        new URLSearchParams(window.location.search).get("workflowRequestId");
-
+      const workflowRequestId = new URLSearchParams(window.location.search).get("workflowRequestId");
       const userInfo = window.pageHeaderJsonData?.userInfo || {};
       const budgets = getBudgetDetails();
       const employeeSubgroup = withoutTrailingCodes(fieldValue("Employee Subgroup"));
@@ -2314,11 +2309,9 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data)
       });
-
       if (!response.ok) {
         throw new Error(`Workflow export failed: ${response.status} ${response.statusText}`);
       }
-
       return response;
     }
 
@@ -2411,7 +2404,6 @@
       });
     }
   }
-
   
 
 
