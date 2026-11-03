@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.4.6
+// @version      1.4.7
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -2279,9 +2279,9 @@
       const currency = currencyText?.match(/\(([^)]+)\)\s*$/)?.[1] || null;
 
       const paymentTypes = [
-        ["Travel", "Travel Reimbursement Amount"],
+        ["Travel", "Travel Amount"],
         ["Transfer", "Transfer Amount"],
-        ["Accommodation", "Accommodation Amount"],
+        ["Accommodation", "Accomodation Amount"],
         ["Other", "Other Costs Amount"]
       ];
 
