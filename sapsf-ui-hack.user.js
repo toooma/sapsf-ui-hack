@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.4.8
+// @version      1.4.9
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -2247,8 +2247,8 @@
       )];
       if (!groups.length) return null;
       const prefix = groups.every(group => /^FIN\d*$/i.test(group))
-        ? "internal: "
-        : "external: ";
+        ? "Internal: "
+        : "External: ";
       return prefix + groups.join(", ");
     }
 
