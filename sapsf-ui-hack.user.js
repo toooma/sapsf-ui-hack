@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.4.7
+// @version      1.4.8
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -2233,9 +2233,9 @@
       const params = new URLSearchParams({
         "$format": "json",
         "$select": "externalCode,cust_ceuApproverUnit",
-        "$filter": `externalCode in (${budgetCodes
+        "$filter": `externalCode in ${budgetCodes
           .map(code => `'${String(code).replace(/'/g, "''")}'`)
-          .join(",")})`
+          .join(",")}`
       });
       const data = await fetchJson(
         `/odata/v2/ProjectControllingObject?${toQueryString(params)}`
