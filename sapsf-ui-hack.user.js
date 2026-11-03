@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.4.4
+// @version      1.4.6
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -197,6 +197,10 @@
         display: none !important;
       }
       table .emptyActionItem {
+        display: none !important;
+      }
+
+      xweb-px-survey-invitation-dialog {
         display: none !important;
       }
 
@@ -2221,6 +2225,76 @@
       }));
     }
 
+    async function fetchBudgetSource(budgets) {
+      const budgetCodes = [...new Set(
+        budgets.map(budget => budget.code).filter(Boolean)
+      )];
+      if (!budgetCodes.length) return null;
+      const params = new URLSearchParams({
+        "$format": "json",
+        "$select": "externalCode,cust_ceuApproverUnit",
+        "$filter": `externalCode in (${budgetCodes
+          .map(code => `'${String(code).replace(/'/g, "''")}'`)
+          .join(",")})`
+      });
+      const data = await fetchJson(
+        `/odata/v2/ProjectControllingObject?${toQueryString(params)}`
+      );
+      const groups = [...new Set(
+        (data?.d?.results || [])
+          .map(item => item?.cust_ceuApproverUnit?.trim())
+          .filter(Boolean)
+      )];
+      if (!groups.length) return null;
+      const prefix = groups.every(group => /^FIN\d*$/i.test(group))
+        ? "internal: "
+        : "external: ";
+      return prefix + groups.join(", ");
+    }
+
+    function getOtherPaymentAmounts() {
+      const section = [...document.querySelectorAll(".baseLayout.ECTFormLayout")]
+        .find(el =>
+          text(el.querySelector(".form_title")) ===
+          "Other Payments (Freelancer / Assignment)"
+        );
+
+      if (!section) return [];
+
+      function readField(label, rowSelector) {
+        const row = [...section.querySelectorAll(rowSelector)].find(row =>
+          text(row.querySelector(".field_label .text")) === label
+        );
+        if (!row) return null;
+
+        const value = row.querySelector(
+          ".field_value .readComp:not(.struck_label .readComp), " +
+          ".field_value input.formElement"
+        );
+
+        return (value?.value || text(value))?.trim() || null;
+      }
+
+      const currencyText = readField("Other Payment Currency", "tr.form_field");
+      const currency = currencyText?.match(/\(([^)]+)\)\s*$/)?.[1] || null;
+
+      const paymentTypes = [
+        ["Travel", "Travel Reimbursement Amount"],
+        ["Transfer", "Transfer Amount"],
+        ["Accommodation", "Accommodation Amount"],
+        ["Other", "Other Costs Amount"]
+      ];
+
+      const items = paymentTypes.flatMap(([type, label]) => {
+        const amount = readField(label, ".flow_field");
+        return amount ? [`${type} ${amount}`] : [];
+      });
+
+      return items.length
+        ? [`${currency ? `${currency} ` : ""}${items.join(" + ")}`]
+        : [];
+    }
+
     async function fetchIncumbentUserId(positionCode, effectiveDate) {
       if (!positionCode) return null;
       const params = new URLSearchParams({
@@ -2249,6 +2323,12 @@
       const workflowRequestId = new URLSearchParams(window.location.search).get("workflowRequestId");
       const userInfo = window.pageHeaderJsonData?.userInfo || {};
       const budgets = getBudgetDetails();
+      let budgetSource = null;
+      try {
+        budgetSource = await fetchBudgetSource(budgets);
+      } catch (err) {
+        console.warn("Could not load budget approver units:", err);
+      }
       const employeeSubgroup = withoutTrailingCodes(fieldValue("Employee Subgroup"));
       const effectiveDate = normalizeDate(
         text(document.querySelector("#effectiveDate")) || fieldValue("Start Date")
@@ -2266,6 +2346,19 @@
           console.warn("Could not resolve incumbent as contractee:", err);
         }
       }
+
+      const baseAmount = [
+        parenthesizedCode(fieldValue("Currency")) || fieldValue("Currency"),
+        employeeSubgroup === "Employee"
+          ? fieldValue("Annual / Monthly Salary Amount")
+          : fieldValue("Gross Contract Amount")
+      ].filter(Boolean).join(" ") || null;
+
+      const otherPaymentAmounts = getOtherPaymentAmounts();
+      const amount = [
+        baseAmount,
+        ...otherPaymentAmounts
+      ].filter(Boolean).join(" + ") || null;
 
       return {
         loggedInUser: {
@@ -2291,12 +2384,8 @@
         "Start Date": normalizeDate(fieldValue("Contract Start Date")),
         "End Date": normalizeDate(fieldValue("Contract End Date")),
         "Compensation": withoutTrailingCodes(fieldValue("Payment Type")),
-        "Amount": [
-          parenthesizedCode(fieldValue("Currency")) || fieldValue("Currency"),
-          employeeSubgroup === "Employee"
-            ? fieldValue("Annual / Monthly Salary Amount")
-            : fieldValue("Gross Contract Amount")
-        ].filter(Boolean).join(" ") || null,
+        "Amount": amount,
+        "Budget Source": budgetSource,
         "Notes": fieldValue("Description of Services")
       };
     }
