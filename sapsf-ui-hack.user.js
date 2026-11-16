@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.5.0
+// @version      1.5.1
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -262,11 +262,16 @@
     ];
 
     function getSearchParts() {
-      const shellbar = document.querySelector("xweb-shellbar");
-      const search = shellbar?.shadowRoot?.querySelector("#search");
-      const input = search?.shadowRoot?.querySelector("#inner");
+      const search =
+        document.querySelector("ui5-shellbar-search-xweb-global-header") ||
+        document.querySelector("xweb-shellbar")
+          ?.shadowRoot?.querySelector("#search");
 
-      return { shellbar, search, input };
+      const input =
+        search?.shadowRoot?.querySelector("input") ||
+        search?.shadowRoot?.querySelector("#inner");
+
+      return { search, input };
     }
 
     function getIntro(search) {
@@ -539,6 +544,28 @@
 
       safeRun(`Route feature "${feature.id}"`, feature.init);
     }
+  }
+
+  function watchRouteChanges() {
+    let lastUrl = window.location.href;
+
+    function checkRoute() {
+      if (window.location.href === lastUrl) return;
+      lastUrl = window.location.href;
+      safeRun("runMatchingRouteFeatures", runMatchingRouteFeatures);
+    }
+
+    for (const method of ["pushState", "replaceState"]) {
+      const original = window.history[method];
+      window.history[method] = function (...args) {
+        const result = original.apply(this, args);
+        checkRoute();
+        return result;
+      };
+    }
+
+    window.addEventListener("popstate", checkRoute);
+    window.addEventListener("hashchange", checkRoute);
   }
 
   /**************************************************************************
@@ -2506,6 +2533,7 @@
     safeRun("addGlobalSearchCommands", addGlobalSearchCommands);
 
     safeRun("runMatchingRouteFeatures", runMatchingRouteFeatures);
+    safeRun("watchRouteChanges", watchRouteChanges);
     safeRun("installFetchWatcher", installFetchWatcher);
 
     console.log("✅ SAP SuccessFactors UI Hack userscript ready.");
