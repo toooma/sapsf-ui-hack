@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.5.4
+// @version      1.5.5
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -294,6 +294,10 @@
     }
 
     function isIntroMarkupReady(intro) {
+      if (intro?.matches?.("ui5-search-message-area-xweb-global-header")) {
+        return Boolean(intro.getAttribute("description"));
+      }
+
       const markup = intro?.getAttribute("markup") || "";
 
       return (
