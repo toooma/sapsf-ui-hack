@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.5.8
+// @version      1.5.9
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -836,7 +836,10 @@
           }
 
           workforcePersonProfile.workProfiles = (workforcePersonProfile.workProfiles ?? [])
-            .sort((a, b) => (b.hireDate ?? "").localeCompare(a.hireDate ?? ""));
+            .sort((a, b) =>
+              Number(Boolean(b.isActive)) - Number(Boolean(a.isActive)) ||
+              (b.hireDate ?? "").localeCompare(a.hireDate ?? "")
+            );
 
           for (const wp of workforcePersonProfile.workProfiles ?? []) {
             wp.personIdExternal = workforcePersonProfile?.externalId;
