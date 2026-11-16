@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.4.9
+// @version      1.5.0
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -808,7 +808,7 @@
 
     function enrichSelectedEmployment(workProfiles = []) {
       const selectedProfileId = document
-        .querySelector("ui5-popover-xweb-people-profile[initial-focus]")
+        .querySelector("ui5-popover[initial-focus]")
         ?.getAttribute("initial-focus");
 
       const profile =
