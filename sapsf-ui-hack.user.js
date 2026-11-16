@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.5.6
+// @version      1.5.7
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -289,24 +289,15 @@
 
       const input = document.createElement("input");
       input.type = "text";
-      input.placeholder = "Position (POSXXXXXX)";
+      input.placeholder = "POSXXXXXX";
       input.setAttribute("aria-label", "Position code");
       input.pattern = "POS[0-9]{6}";
       input.maxLength = 9;
       input.title = "Enter a position code such as POS107614";
-      Object.assign(input.style, {
-        width: "11rem",
-        boxSizing: "border-box",
-        padding: "0.4rem"
-      });
+      input.style.cssText = "width: 11rem; box-sizing: border-box; padding: 0.4rem;";
 
-      const button = document.createElement("button");
-      button.type = "submit";
-      button.textContent = "Go";
-      button.setAttribute("aria-label", "Open position");
-
-      form.append(input, button);
-      form.addEventListener("submit", event => {
+      input.addEventListener("keydown", event => {
+        if (event.key !== "Enter") return;
         event.preventDefault();
 
         const code = input.value.trim().toUpperCase();
