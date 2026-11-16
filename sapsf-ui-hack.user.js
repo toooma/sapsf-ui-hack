@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.5.9
+// @version      1.6.0
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -191,9 +191,10 @@
         right: 0;
       }
 
-      div[class*="EmploymentListItem_container__"] > ui5-text-xweb-people-profile:not(.ui5Custom),
       div[class*="FullProfileDetailView_contentWrapper__"] > ui5-text-xweb-people-profile:not(.ui5Custom),
+      div[class*="FullProfileDetailView_contentWrapper__"] > ui5-text:not(.ui5Custom),
       div[class*="EmploymentListItem_displayTitleContainer__"] > ui5-text:not(.ui5Custom),
+      div[class*="EmploymentListItem_container__"] > ui5-text-xweb-people-profile:not(.ui5Custom),
       div[class*="EmploymentListItem_container__"] > ui5-text:not(.ui5Custom) {
         display: none !important;
       }
