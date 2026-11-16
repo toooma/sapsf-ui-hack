@@ -193,7 +193,7 @@
 
       div[class*="EmploymentListItem_container__"] > ui5-text-xweb-people-profile:not(.ui5Custom),
       div[class*="FullProfileDetailView_contentWrapper__"] > ui5-text-xweb-people-profile:not(.ui5Custom),
-      div[class*="EmploymentListItem_displayTitleContainer__"] > ui5-text:not(.ui5Custom)
+      div[class*="EmploymentListItem_displayTitleContainer__"] > ui5-text:not(.ui5Custom),
       div[class*="EmploymentListItem_container__"] > ui5-text:not(.ui5Custom) {
         display: none !important;
       }
