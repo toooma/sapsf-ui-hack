@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.5.3
+// @version      1.5.4
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -286,7 +286,9 @@
 
     function getIntro(search) {
       return (
+        search?.shadowRoot?.querySelector("ui5-search-message-area-xweb-global-header") ||
         search?.shadowRoot?.querySelector("xweb-global-search-intro") ||
+        search?.querySelector?.("ui5-search-message-area-xweb-global-header") ||
         search?.querySelector?.("xweb-global-search-intro")
       );
     }
@@ -346,6 +348,23 @@
     function enhanceIntroNow(intro) {
       if (!intro || introOriginals.has(intro)) return;
 
+      const isNewMessageArea =
+        intro.matches?.("ui5-search-message-area-xweb-global-header");
+
+      if (isNewMessageArea) {
+        const originalDescription =
+          intro.getAttribute("description") || "";
+
+        introOriginals.set(intro, { description: originalDescription });
+
+        intro.setAttribute(
+          "description",
+          `${originalDescription} Type u: followed by a User ID, or p: followed by a Position code.`
+        );
+
+        return;
+      }
+
       const originalNoSearchResultMsg =
         intro.getAttribute("no-search-result-msg") ||
         "No matching results. Try a different search.";
@@ -360,10 +379,7 @@
       const commandOptionsMarkup = searchCommands
         .map(command => {
           const marker = `data-search-command-option="${command.prefix}"`;
-
-          if (originalMarkup.includes(marker)) {
-            return "";
-          }
+          if (originalMarkup.includes(marker)) return "";
 
           return `
             <li ${marker}>
@@ -383,8 +399,6 @@
         : `${originalMarkup}${commandOptionsMarkup}`;
 
       intro.setAttribute("markup", enhancedMarkup);
-
-      console.log("✅ Global search commands intro enhanced.");
     }
 
     function getMatchingCommand(value) {
@@ -409,14 +423,24 @@
 
       ensureIntroEnhanced(intro);
 
-      const original = introOriginals.get(intro);
-
-      intro.setAttribute(
-        "no-search-result-msg",
-        command
-          ? command.hint
-          : original?.noSearchResultMsg || "No matching results. Try a different search."
-      );
+      if (intro.matches?.("ui5-search-message-area-xweb-global-header")) {
+        const originalDescription =
+          introOriginals.get(intro)?.description || "";
+        intro.setAttribute(
+          "description",
+          command
+            ? command.hint
+            : `${originalDescription} Type u: followed by a User ID, or p: followed by a Position code.`
+        );
+      } else {
+        const original = introOriginals.get(intro);
+        intro.setAttribute(
+          "no-search-result-msg",
+          command
+            ? command.hint
+            : original?.noSearchResultMsg || "No matching results. Try a different search."
+        );
+      }
     }
 
     function attachGlobalSearchCommands() {
