@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.5.1
+// @version      1.5.2
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -185,6 +185,13 @@
 
       div[class*="EmploymentListItem_container__"] > ui5-text-xweb-people-profile:not(.ui5Custom),
       div[class*="FullProfileDetailView_contentWrapper__"] > ui5-text-xweb-people-profile:not(.ui5Custom) {
+        display: none !important;
+      }
+
+      div[class*="EmploymentListItem_container__"] >
+        ui5-text-xweb-people-profile:not(.ui5Custom),
+      div[class*="EmploymentListItem_container__"] >
+        ui5-text:not(.ui5Custom) {
         display: none !important;
       }
 
@@ -678,6 +685,15 @@
       }
     }
 
+    function findSelectedEmployment() {
+      return (
+        document.querySelector("#selectedEmployment") ||
+        document.querySelector(
+          'ui5-list[data-testid="contextSwitcherList"] ui5-li-custom[selected]'
+        )
+      );
+    }
+
     function createUi5Text(label, value) {
       if (!value) return null;
       const el = document.createElement("ui5-text-xweb-people-profile");
@@ -811,8 +827,10 @@
 
     function enrichWorkProfileItem(profile) {
       if (!profile?.id) return false;
+      const escapedId = CSS.escape(String(profile.id));
       const li = document.querySelector(
-        `ui5-li-custom-xweb-people-profile[id="${CSS.escape(profile.id)}"]`
+        `ui5-li-custom-xweb-people-profile[id="${escapedId}"], ` +
+        `ui5-li-custom[id="${escapedId}"]`
       );
       if (!li) return false;
       if (li.getAttribute(ENRICHED_ATTR) === "true") {
@@ -845,7 +863,7 @@
 
       if (!profile) return false;
 
-      const selectedEmployment = document.querySelector("#selectedEmployment");
+      const selectedEmployment = findSelectedEmployment();
       const fullProfileContainer = findFullProfileDetailContainer();
 
       if (!selectedEmployment && !fullProfileContainer) return false;
@@ -877,7 +895,7 @@
     }
 
     function hasSelectedEnrichment() {
-      const selectedEmployment = document.querySelector("#selectedEmployment");
+      const selectedEmployment = findSelectedEmployment();
       const fullProfileContainer = findFullProfileDetailContainer();
 
       const container = selectedEmployment
@@ -898,7 +916,7 @@
         if (!latestWorkProfiles.length) return;
 
         const fullProfileContainer = findFullProfileDetailContainer();
-        const selectedEmployment = document.querySelector("#selectedEmployment");
+        const selectedEmployment = findSelectedEmployment();
 
         if (!fullProfileContainer && !selectedEmployment) return;
 
