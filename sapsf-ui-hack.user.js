@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.5.7
+// @version      1.5.8
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -247,89 +247,6 @@
       extendSessionSafely();
       setInterval(extendSessionSafely, keepAliveIntervalMs);
     }, checkIntervalMs);
-  }
-
-  function addPositionJumpInput() {
-    const FORM_ATTR = "data-sapsf-position-jump";
-
-    function findShellbarContentArea() {
-      const roots = [document];
-
-      while (roots.length) {
-        const root = roots.pop();
-        const area = root.querySelector?.(".ui5-shellbar-content-area");
-
-        if (area) return area;
-
-        root.querySelectorAll?.("*").forEach(el => {
-          if (el.shadowRoot) roots.push(el.shadowRoot);
-        });
-      }
-
-      return null;
-    }
-
-    function attach() {
-      const contentArea = findShellbarContentArea();
-
-      if (!contentArea || contentArea.querySelector(`[${FORM_ATTR}]`)) {
-        return Boolean(contentArea);
-      }
-
-      const form = document.createElement("form");
-      form.setAttribute(FORM_ATTR, "true");
-      form.setAttribute("aria-label", "Go to position");
-
-      Object.assign(form.style, {
-        display: "flex",
-        alignItems: "center",
-        gap: "0.25rem",
-        marginInline: "0.5rem"
-      });
-
-      const input = document.createElement("input");
-      input.type = "text";
-      input.placeholder = "POSXXXXXX";
-      input.setAttribute("aria-label", "Position code");
-      input.pattern = "POS[0-9]{6}";
-      input.maxLength = 9;
-      input.title = "Enter a position code such as POS107614";
-      input.style.cssText = "width: 11rem; box-sizing: border-box; padding: 0.4rem;";
-
-      input.addEventListener("keydown", event => {
-        if (event.key !== "Enter") return;
-        event.preventDefault();
-
-        const code = input.value.trim().toUpperCase();
-        if (!/^POS\d{6}$/.test(code)) {
-          input.setCustomValidity("Enter a position code such as POS107614.");
-          input.reportValidity();
-          return;
-        }
-
-        input.setCustomValidity("");
-        window.location.href =
-          `/xi/ui/ect/pages/positionMgmt/position.xhtml?m=PositionManagement&#t=Position&e=${encodeURIComponent(code)}`;
-      });
-
-      const searchArea = contentArea.querySelector(
-        ".ui5-shellbar-search-field-area"
-      );
-      contentArea.insertBefore(form, searchArea || null);
-
-      return true;
-    }
-
-    if (attach()) return;
-
-    const observer = new MutationObserver(() => {
-      if (attach()) observer.disconnect();
-    });
-
-    observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true
-    });
   }
 
   /**************************************************************************
@@ -2404,7 +2321,6 @@
     safeRun("startKeepSessionAliveWhenAvailable", startKeepSessionAliveWhenAvailable);
 
     safeRun("applyStyleHacks", applyStyleHacks);
-    safeRun("addPositionJumpInput", addPositionJumpInput);
 
     safeRun("runMatchingRouteFeatures", runMatchingRouteFeatures);
     safeRun("watchRouteChanges", watchRouteChanges);
