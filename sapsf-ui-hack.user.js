@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.5.5
+// @version      1.5.6
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -249,263 +249,97 @@
     }, checkIntervalMs);
   }
 
-  function addGlobalSearchCommands() {
-    const introOriginals = new WeakMap();
+  function addPositionJumpInput() {
+    const FORM_ATTR = "data-sapsf-position-jump";
 
-    const searchCommands = [
-      {
-        prefix: "u:",
-        label: "User ID, using “u:”, for example “u:123456”",
-        icon: "person-placeholder",
-        hint: "Enter the User ID, then press Enter.",
-        buildUrl: value =>
-          `/sf/liveprofile?selected_user=${encodeURIComponent(value)}`
-      },
-      {
-        prefix: "p:",
-        label: "Position, using “p:”, for example “p:POS123456”",
-        icon: "org-chart",
-        hint: "Enter the Position code, then press Enter.",
-        buildUrl: value =>
-          `/xi/ui/ect/pages/positionMgmt/position.xhtml?#t=Position&m=PositionManagement&u=position&e=${encodeURIComponent(value)}`
-      }
-    ];
+    function findShellbarContentArea() {
+      const roots = [document];
 
-    function getSearchParts() {
-      const search =
-        document.querySelector("ui5-shellbar-search-xweb-global-header") ||
-        document.querySelector("xweb-shellbar")
-          ?.shadowRoot?.querySelector("#search");
+      while (roots.length) {
+        const root = roots.pop();
+        const area = root.querySelector?.(".ui5-shellbar-content-area");
 
-      const input =
-        search?.shadowRoot?.querySelector("input") ||
-        search?.shadowRoot?.querySelector("#inner");
+        if (area) return area;
 
-      return { search, input };
-    }
-
-    function getIntro(search) {
-      return (
-        search?.shadowRoot?.querySelector("ui5-search-message-area-xweb-global-header") ||
-        search?.shadowRoot?.querySelector("xweb-global-search-intro") ||
-        search?.querySelector?.("ui5-search-message-area-xweb-global-header") ||
-        search?.querySelector?.("xweb-global-search-intro")
-      );
-    }
-
-    function isIntroMarkupReady(intro) {
-      if (intro?.matches?.("ui5-search-message-area-xweb-global-header")) {
-        return Boolean(intro.getAttribute("description"));
+        root.querySelectorAll?.("*").forEach(el => {
+          if (el.shadowRoot) roots.push(el.shadowRoot);
+        });
       }
 
-      const markup = intro?.getAttribute("markup") || "";
-
-      return (
-        markup.includes("<ul") ||
-        markup.includes("</ul>") ||
-        markup.includes("searchItemText")
-      );
+      return null;
     }
 
-    function ensureIntroEnhanced(intro) {
-      if (!intro || introOriginals.has(intro)) return;
+    function attach() {
+      const contentArea = findShellbarContentArea();
 
-      if (!isIntroMarkupReady(intro)) {
-        waitForIntroMarkupThenEnhance(intro);
-        return;
+      if (!contentArea || contentArea.querySelector(`[${FORM_ATTR}]`)) {
+        return Boolean(contentArea);
       }
 
-      enhanceIntroNow(intro);
-    }
+      const form = document.createElement("form");
+      form.setAttribute(FORM_ATTR, "true");
+      form.setAttribute("aria-label", "Go to position");
 
-    function waitForIntroMarkupThenEnhance(intro) {
-      if (!intro || intro.dataset.globalSearchCommandsIntroMarkupObserverAttached === "true") {
-        return;
-      }
-
-      intro.dataset.globalSearchCommandsIntroMarkupObserverAttached = "true";
-
-      const observer = new MutationObserver(() => {
-        if (!isIntroMarkupReady(intro)) return;
-
-        observer.disconnect();
-        delete intro.dataset.globalSearchCommandsIntroMarkupObserverAttached;
-
-        enhanceIntroNow(intro);
+      Object.assign(form.style, {
+        display: "flex",
+        alignItems: "center",
+        gap: "0.25rem",
+        marginInline: "0.5rem"
       });
 
-      observer.observe(intro, {
-        attributes: true,
-        attributeFilter: ["markup", "no-search-result-msg"]
+      const input = document.createElement("input");
+      input.type = "text";
+      input.placeholder = "Position (POSXXXXXX)";
+      input.setAttribute("aria-label", "Position code");
+      input.pattern = "POS[0-9]{6}";
+      input.maxLength = 9;
+      input.title = "Enter a position code such as POS107614";
+      Object.assign(input.style, {
+        width: "11rem",
+        boxSizing: "border-box",
+        padding: "0.4rem"
       });
 
-      setTimeout(() => {
-        if (!introOriginals.has(intro) && isIntroMarkupReady(intro)) {
-          observer.disconnect();
-          delete intro.dataset.globalSearchCommandsIntroMarkupObserverAttached;
+      const button = document.createElement("button");
+      button.type = "submit";
+      button.textContent = "Go";
+      button.setAttribute("aria-label", "Open position");
 
-          enhanceIntroNow(intro);
+      form.append(input, button);
+      form.addEventListener("submit", event => {
+        event.preventDefault();
+
+        const code = input.value.trim().toUpperCase();
+        if (!/^POS\d{6}$/.test(code)) {
+          input.setCustomValidity("Enter a position code such as POS107614.");
+          input.reportValidity();
+          return;
         }
-      }, 500);
-    }
 
-    function enhanceIntroNow(intro) {
-      if (!intro || introOriginals.has(intro)) return;
-
-      const isNewMessageArea =
-        intro.matches?.("ui5-search-message-area-xweb-global-header");
-
-      if (isNewMessageArea) {
-        const originalDescription =
-          intro.getAttribute("description") || "";
-
-        introOriginals.set(intro, { description: originalDescription });
-
-        intro.setAttribute(
-          "description",
-          `${originalDescription} Type u: followed by a User ID, or p: followed by a Position code.`
-        );
-
-        return;
-      }
-
-      const originalNoSearchResultMsg =
-        intro.getAttribute("no-search-result-msg") ||
-        "No matching results. Try a different search.";
-
-      const originalMarkup = intro.getAttribute("markup") || "";
-
-      introOriginals.set(intro, {
-        noSearchResultMsg: originalNoSearchResultMsg,
-        markup: originalMarkup
+        input.setCustomValidity("");
+        window.location.href =
+          `/xi/ui/ect/pages/positionMgmt/position.xhtml?m=PositionManagement&#t=Position&e=${encodeURIComponent(code)}`;
       });
 
-      const commandOptionsMarkup = searchCommands
-        .map(command => {
-          const marker = `data-search-command-option="${command.prefix}"`;
-          if (originalMarkup.includes(marker)) return "";
-
-          return `
-            <li ${marker}>
-              <span class="searchItemIcon globalIconFont1Support">
-                <ui5-icon-sf-header class="icon" name="${command.icon}" mode="Image"></ui5-icon-sf-header>
-              </span>
-              <span class="searchItemText">${command.label}</span>
-            </li>
-          `;
-        })
-        .join("");
-
-      if (!commandOptionsMarkup.trim()) return;
-
-      const enhancedMarkup = originalMarkup.includes("</ul>")
-        ? originalMarkup.replace("</ul>", `${commandOptionsMarkup}</ul>`)
-        : `${originalMarkup}${commandOptionsMarkup}`;
-
-      intro.setAttribute("markup", enhancedMarkup);
-    }
-
-    function getMatchingCommand(value) {
-      const normalizedValue = value.trim().toLowerCase();
-
-      return searchCommands.find(command =>
-        normalizedValue.startsWith(command.prefix.toLowerCase())
+      const searchArea = contentArea.querySelector(
+        ".ui5-shellbar-search-field-area"
       );
-    }
-
-    function getCommandValue(value, command) {
-      return value.slice(command.prefix.length).trim();
-    }
-
-    function updateCommandHint(input) {
-      const value = input.value.trim();
-      const command = getMatchingCommand(value);
-
-      const { search } = getSearchParts();
-      const intro = getIntro(search);
-      if (!intro) return;
-
-      ensureIntroEnhanced(intro);
-
-      if (intro.matches?.("ui5-search-message-area-xweb-global-header")) {
-        const originalDescription =
-          introOriginals.get(intro)?.description || "";
-        intro.setAttribute(
-          "description",
-          command
-            ? command.hint
-            : `${originalDescription} Type u: followed by a User ID, or p: followed by a Position code.`
-        );
-      } else {
-        const original = introOriginals.get(intro);
-        intro.setAttribute(
-          "no-search-result-msg",
-          command
-            ? command.hint
-            : original?.noSearchResultMsg || "No matching results. Try a different search."
-        );
-      }
-    }
-
-    function attachGlobalSearchCommands() {
-      const { input, search } = getSearchParts();
-      if (!input) return false;
-
-      const intro = getIntro(search);
-      if (intro) ensureIntroEnhanced(intro);
-
-      if (input.dataset.globalSearchCommandsAttached === "true") return true;
-      input.dataset.globalSearchCommandsAttached = "true";
-
-      input.addEventListener(
-        "input",
-        () => {
-          updateCommandHint(input);
-        },
-        true
-      );
-
-      input.addEventListener(
-        "keydown",
-        event => {
-          if (event.key !== "Enter") return;
-
-          const value = input.value.trim();
-          const command = getMatchingCommand(value);
-
-          if (!command) return;
-
-          event.preventDefault();
-          event.stopPropagation();
-          event.stopImmediatePropagation();
-
-          const commandValue = getCommandValue(value, command);
-          if (!commandValue) return;
-
-          window.location.href = command.buildUrl(commandValue);
-        },
-        true
-      );
-
-      console.log("✅ Global search commands attached.");
+      contentArea.insertBefore(form, searchArea || null);
 
       return true;
     }
 
-    if (attachGlobalSearchCommands()) return;
+    if (attach()) return;
 
     const observer = new MutationObserver(() => {
-      if (attachGlobalSearchCommands()) {
-        observer.disconnect();
-      }
+      if (attach()) observer.disconnect();
     });
 
-    observer.observe(document.body, {
+    observer.observe(document.documentElement, {
       childList: true,
       subtree: true
     });
   }
-
 
   /**************************************************************************
    * 3. Route-based feature registry
@@ -2568,8 +2402,7 @@
         subtree: true
       });
     }
-  }
-  
+  }  
 
 
   /**************************************************************************
@@ -2577,9 +2410,10 @@
    **************************************************************************/
 
   function bootstrap() {
-    safeRun("applyStyleHacks", applyStyleHacks);
     safeRun("startKeepSessionAliveWhenAvailable", startKeepSessionAliveWhenAvailable);
-    safeRun("addGlobalSearchCommands", addGlobalSearchCommands);
+
+    safeRun("applyStyleHacks", applyStyleHacks);
+    safeRun("addPositionJumpInput", addPositionJumpInput);
 
     safeRun("runMatchingRouteFeatures", runMatchingRouteFeatures);
     safeRun("watchRouteChanges", watchRouteChanges);
