@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.6.1
+// @version      1.6.2
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -361,13 +361,21 @@
   const fetchTargets = [
     {
       id: "liveProfileWorkforcePersonProfile",
-      route: ROUTES.LIVE_PROFILE,
+      route: location =>
+        [
+          ROUTES.LIVE_PROFILE,
+          ROUTES.LIVE_PROFILE_INTENT
+        ].includes(location.pathname),
       urlPattern: /\/rest\/workforce\/v1\/workforcePersonProfiles\//,
       handle: handleLiveProfileWorkforcePersonProfileFetch
     },
     {
       id: "liveProfileCostAssignment",
-      route: ROUTES.LIVE_PROFILE,
+      route: location =>
+        [
+          ROUTES.LIVE_PROFILE,
+          ROUTES.LIVE_PROFILE_INTENT
+        ].includes(location.pathname),
       urlPattern: /\/rest\/workforce\/assignment\/additionalinfo\/uiconfig\/v1\/configs\/costAssignment\b/,
       handle: handleLiveProfileCostAssignmentFetch
     },
