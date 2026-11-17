@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.6.0
+// @version      1.6.1
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -37,6 +37,7 @@
 
   const ROUTES = {
     LIVE_PROFILE: "/sf/liveprofile",
+    LIVE_PROFILE_INTENT: "/sf/intent/LiveProfile-display",
     DOCUMENT_GENERATOR: "/xi/ui/documentgeneration/pages/generator.xhtml",
     POSITION: "/xi/ui/ect/pages/positionMgmt/position.xhtml",
     MANAGE_DATA: "/xi/ui/genericobject/pages/mdf/mdf.xhtml",
@@ -257,7 +258,11 @@
   const routeFeatures = [
     {
       id: "liveProfileEnrichment",
-      route: ROUTES.LIVE_PROFILE,
+      route: location =>
+        [
+          ROUTES.LIVE_PROFILE,
+          ROUTES.LIVE_PROFILE_INTENT
+        ].includes(location.pathname),
       init: initLiveProfileEnrichment
     },
     {
