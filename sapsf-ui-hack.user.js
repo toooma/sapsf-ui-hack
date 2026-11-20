@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.6.3
+// @version      1.6.4
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -186,6 +186,7 @@
 
       div[class*="EmploymentListItem_container__"] {
         position: relative;
+        min-height: 1rem;
       }
       div[class*="EmploymentListItem_displayTitleContainer__"] {
         position: absolute;
@@ -731,18 +732,21 @@
         const relevant = mutations.some(mutation => {
           if (mutation.type !== "childList") return false;
 
-          const nodes = [
-            ...mutation.addedNodes,
-            ...mutation.removedNodes
-          ];
+          if (
+            mutation.target instanceof HTMLElement &&
+            mutation.target.closest("#selectedEmployment")
+          ) {
+            return true;
+          }
 
+          const nodes = [...mutation.addedNodes, ...mutation.removedNodes];
           return nodes.some(node => {
             if (!(node instanceof HTMLElement)) return false;
 
             return (
               node.id === "selectedEmployment" ||
               node.matches?.('div[class^="FullProfileDetailView_contentWrapper__"], div[class*=" FullProfileDetailView_contentWrapper__"]') ||
-              node.querySelector?.('#selectedEmployment') ||
+              node.querySelector?.("#selectedEmployment") ||
               node.querySelector?.('div[class^="FullProfileDetailView_contentWrapper__"], div[class*=" FullProfileDetailView_contentWrapper__"]')
             );
           });
