@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.6.2
+// @version      1.6.3
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -338,6 +338,11 @@
     function checkRoute() {
       if (window.location.href === lastUrl) return;
       lastUrl = window.location.href;
+      if (routeMatches(location =>
+        [ROUTES.LIVE_PROFILE, ROUTES.LIVE_PROFILE_INTENT].includes(location.pathname)
+      )) {
+        window.sapSfUiHackLiveProfileEnrichment?.refresh();
+      }
       safeRun("runMatchingRouteFeatures", runMatchingRouteFeatures);
     }
 
@@ -454,6 +459,11 @@
       getWorkforcePersonProfileDetails,
       enrichWorkProfiles,
       setLatestWorkProfiles,
+      refresh() {
+        findSelectedEmployment()?.removeAttribute(SELECTED_ENRICHED_ATTR);
+        findFullProfileDetailContainer()?.removeAttribute(SELECTED_ENRICHED_ATTR);
+        if (latestWorkProfiles.length) enrichWorkProfiles(latestWorkProfiles);
+      },
     };
 
     async function getWorkforcePersonProfileDetails(id) {
@@ -851,8 +861,8 @@
 
           workforcePersonProfile.workProfiles = (workforcePersonProfile.workProfiles ?? [])
             .sort((a, b) =>
-              Number(Boolean(b.isActive)) - Number(Boolean(a.isActive)) ||
-              (b.hireDate ?? "").localeCompare(a.hireDate ?? "")
+              (b.hireDate ?? "").localeCompare(a.hireDate ?? "") ||
+              Number(Boolean(b.isActive)) - Number(Boolean(a.isActive))
             );
 
           for (const wp of workforcePersonProfile.workProfiles ?? []) {
