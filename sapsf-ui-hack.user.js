@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.6.4
+// @version      1.6.5
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -170,8 +170,8 @@
         resize: both !important;
       }
 
-      #selectedEmployment ui5-text-xweb-people-profile,
-      #selectedEmployment ui5-text-xweb-people-profile * {
+      #selectedEmployment ui5-text,
+      #selectedEmployment ui5-text * {
         user-select: text !important;
         -webkit-user-select: text !important;
         cursor: text !important;
@@ -193,10 +193,8 @@
         right: 0;
       }
 
-      div[class*="FullProfileDetailView_contentWrapper__"] > ui5-text-xweb-people-profile:not(.ui5Custom),
       div[class*="FullProfileDetailView_contentWrapper__"] > ui5-text:not(.ui5Custom),
       div[class*="EmploymentListItem_displayTitleContainer__"] > ui5-text:not(.ui5Custom),
-      div[class*="EmploymentListItem_container__"] > ui5-text-xweb-people-profile:not(.ui5Custom),
       div[class*="EmploymentListItem_container__"] > ui5-text:not(.ui5Custom) {
         display: none !important;
       }
@@ -494,7 +492,7 @@
 
     function createUi5Text(label, value) {
       if (!value) return null;
-      const el = document.createElement("ui5-text-xweb-people-profile");
+      const el = document.createElement("ui5-text");
       el.classList.add("ui5Custom");
       if (label === "Position") {
         const link = createPositionLink(value);
@@ -609,7 +607,7 @@
 
     function clearCustomProfileRows(container) {
       container
-        ?.querySelectorAll(":scope > ui5-text-xweb-people-profile.ui5Custom")
+        ?.querySelectorAll(":scope > ui5-text.ui5Custom")
         ?.forEach(el => el.remove());
     }
 
@@ -700,7 +698,7 @@
         ? findEmploymentContainer(selectedEmployment)
         : fullProfileContainer;
 
-      return Boolean(container?.querySelector(":scope > ui5-text-xweb-people-profile.ui5Custom"));
+      return Boolean(container?.querySelector(":scope > ui5-text.ui5Custom"));
     }
 
     function scheduleReenrichIfNeeded() {
@@ -920,7 +918,7 @@
     let done = false;
 
     function findAdditionalAssignmentCards() {
-      return [...document.querySelectorAll('ui5-text-xweb-people-profile[title="Additional Assignment"]')]
+      return [...document.querySelectorAll('ui5-text[title="Additional Assignment"]')]
         .map(titleEl =>
           titleEl.closest(
             'div[class^="ListCard_itemContent__"], div[class*=" ListCard_itemContent__"]'
@@ -932,7 +930,7 @@
     function findPercentageEl(card, percentage) {
       const percentageText = `${percentage}%`;
 
-      return [...card.querySelectorAll("ui5-text-xweb-people-profile")]
+      return [...card.querySelectorAll("ui5-text")]
         .find(el =>
           el.getAttribute("title") === percentageText ||
           el.getAttribute("aria-label") === percentageText ||
