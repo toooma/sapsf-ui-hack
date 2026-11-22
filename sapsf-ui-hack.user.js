@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.7.0
+// @version      1.7.1
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -773,7 +773,7 @@
     }
 
     function applyProfileEnrichment() {
-      if (!isLiveProfileRoute() || !latestWorkProfiles.length) return;
+      if (!latestWorkProfiles.length) return;
       for (const profile of latestWorkProfiles) {
         enrichWorkProfileItem(profile);
       }
