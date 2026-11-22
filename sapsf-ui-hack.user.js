@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.7.5
+// @version      1.7.6
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -536,10 +536,9 @@
 
     window.sapSfUiHackLiveProfileEnrichment = {
       getWorkforcePersonProfileDetails,
-      enrichWorkProfiles,
-      setLatestWorkProfiles,
+      storeWorkProfilesForPerson,
       refresh() {
-        scheduleProfileEnrichment();
+        useCurrentWorkProfiles();
       },
       forceApply() {
         applyProfileEnrichment();
@@ -621,14 +620,6 @@
       return document.querySelector(
         'div[class^="FullProfileDetailView_contentWrapper__"], div[class*=" FullProfileDetailView_contentWrapper__"]'
       );
-    }
-
-    function findUserDisplayNameContainers() {
-      return [
-        ...document.querySelectorAll(
-          'div[class^="UserDisplayName_root__"], div[class*=" UserDisplayName_root__"]'
-        )
-      ];
     }
 
     function extractBracketCode(value) {
@@ -767,9 +758,6 @@
     }
 
     function findSelectedProfile(workProfiles) {
-      const sameId = (a, b) =>
-        Boolean(a) && Boolean(b) && String(a).toUpperCase() === String(b).toUpperCase();
-
       const hashId = getSelectedWorkProfileIdFromHash();
       const byHash = hashId && workProfiles.find(p => sameId(p?.id, hashId));
       if (byHash) return byHash;
@@ -820,6 +808,7 @@
     }
 
     function applyProfileEnrichment() {
+      if (!isLiveProfileRoute()) return;
       if (!latestWorkProfiles.length) return;
       for (const profile of latestWorkProfiles) {
         enrichWorkProfileItem(profile);
@@ -836,13 +825,35 @@
       });
     }
 
-    function enrichWorkProfiles() {
-      // Kept for existing callers. The persistent observer does the real work.
-      scheduleProfileEnrichment();
+    function storeWorkProfilesForPerson(personId, workProfiles) {
+      workProfilesByPersonId.delete(personId);
+      workProfilesByPersonId.set(personId, workProfiles);
+
+      // Keep the cache bounded.
+      if (workProfilesByPersonId.size > 20) {
+        workProfilesByPersonId.delete(workProfilesByPersonId.keys().next().value);
+      }
+
+      lastStoredPersonId = personId;
+      useCurrentWorkProfiles();
     }
 
-    function setLatestWorkProfiles(workProfiles = []) {
-      latestWorkProfiles = workProfiles;
+    function useCurrentWorkProfiles() {
+      const hashId = getSelectedWorkProfileIdFromHash();
+      let resolved = null;
+
+      if (hashId) {
+        // Use the person who owns the work profile shown in the URL.
+        for (const profiles of workProfilesByPersonId.values()) {
+          if (profiles.some(p => sameId(p?.id, hashId))) {
+            resolved = profiles;
+          }
+        }
+      } else if (lastStoredPersonId) {
+        resolved = workProfilesByPersonId.get(lastStoredPersonId);
+      }
+
+      latestWorkProfiles = resolved || [];
       scheduleProfileEnrichment();
     }
 
@@ -858,8 +869,6 @@
     console.log("✅ Live Profile enrichment module initialized.");
   }
 
-  let liveProfileEnrichmentRunId = 0;
-
   function handleLiveProfileWorkforcePersonProfileFetch({ response }) {
     const liveProfileEnrichment = window.sapSfUiHackLiveProfileEnrichment;
 
@@ -868,8 +877,6 @@
       return;
     }
 
-    const runId = ++liveProfileEnrichmentRunId;
-
     response
       .clone()
       .json()
@@ -877,26 +884,9 @@
         const id = data?.id;
         if (!id) return;
 
-        // Clear only when the person really changes, so a re-render or a
-        // failed request never blanks the panel for the same person.
-        if (id !== latestPersonId) {
-          latestPersonId = id;
-
-          console.log("🧾 Stored work profiles", {
-            personId: id,
-            externalId: workforcePersonProfile?.externalId,
-            displayName: workforcePersonProfile?.displayName,
-            workProfileIds: (workforcePersonProfile?.workProfiles || []).map(p => p.id),
-            requestUrl: response.url
-          });
-          liveProfileEnrichment.setLatestWorkProfiles([]);
-        }
-
         try {
           const workforcePersonProfile =
             await liveProfileEnrichment.getWorkforcePersonProfileDetails(id);
-
-          if (runId !== liveProfileEnrichmentRunId) return; // stale result
 
           workforcePersonProfile.workProfiles = (workforcePersonProfile.workProfiles ?? [])
             .sort((a, b) =>
@@ -908,15 +898,9 @@
             wp.personIdExternal = workforcePersonProfile?.externalId;
           }
 
-          console.log("🧾 Stored work profiles", {
-            personId: id,
-            externalId: workforcePersonProfile?.externalId,
-            displayName: workforcePersonProfile?.displayName,
-            workProfileIds: (workforcePersonProfile?.workProfiles || []).map(p => p.id),
-            requestUrl: response.url
-          });
-          liveProfileEnrichment.setLatestWorkProfiles(
-            workforcePersonProfile?.workProfiles || []
+          liveProfileEnrichment.storeWorkProfilesForPerson(
+            id,
+            workforcePersonProfile.workProfiles
           );
         } catch (err) {
           console.error("Failed to fetch workforcePersonProfile details:", err);
@@ -927,8 +911,11 @@
       });
   }
 
-  let latestPersonId = null;
   let latestWorkProfiles = [];
+  const sameId = (a, b) =>
+    Boolean(a) && Boolean(b) && String(a).toUpperCase() === String(b).toUpperCase();
+  const workProfilesByPersonId = new Map();
+  let lastStoredPersonId = null;
   let latestCostAssignmentItems = [];
   let costAssignmentObserver = null;
   let costAssignmentScheduled = false;
