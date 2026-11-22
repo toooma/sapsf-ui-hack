@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.6.6
+// @version      1.6.7
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -911,6 +911,8 @@
       }, 10000);
     }
     ensureLiveProfileReenrichObserver();
+    ensureCostAssignmentObserver();
+    scheduleCostAssignmentEnrichment();
     console.log("✅ Live Profile enrichment module initialized.");
   }
 
@@ -968,124 +970,135 @@
       });
   }
 
+  let latestCostAssignmentItems = [];
+  let costAssignmentObserver = null;
+  let costAssignmentScheduled = false;
+  const COST_ASSIGNMENT_ENRICHED_ATTR = "data-sapsf-ui-hack-cost-assignment-enriched";
+
+  function isLiveProfileRoute() {
+    return [ROUTES.LIVE_PROFILE, ROUTES.LIVE_PROFILE_INTENT].includes(window.location.pathname);
+  }
+
   function handleLiveProfileCostAssignmentFetch({ response }) {
     response
       .clone()
       .json()
       .then(data => {
-        const timeslice = data?.$data?.timeslices?.[0];
-        const items = timeslice?.items || [];
-
-        if (!items.length) return;
-
-        enrichLiveProfileCostAssignmentCards(items);
+        const items = data?.$data?.timeslices?.[0]?.items || [];
+        setLatestCostAssignmentItems(items);
       })
       .catch(err => {
         console.error("Failed to parse Cost Assignment response JSON:", err);
       });
   }
 
-  function enrichLiveProfileCostAssignmentCards(items) {
-    const enrichedAttr = "data-sapsf-ui-hack-cost-assignment-enriched";
-    const timeoutMs = 10000;
-
-    const enrichableItems = items
+  function setLatestCostAssignmentItems(items) {
+    // Always replace, including with an empty list, so a previous person's
+    // percentages are never applied to the next person's cards.
+    latestCostAssignmentItems = items
       .map(item => ({
         percentage: item?.percentage,
         code: item?.workBreakdownStructureDetail?.code
       }))
       .filter(item => item.code && item.percentage !== null && item.percentage !== undefined);
 
-    if (!enrichableItems.length) return;
+    ensureCostAssignmentObserver();
+    scheduleCostAssignmentEnrichment();
+  }
 
-    let done = false;
+  function ensureCostAssignmentObserver() {
+    if (costAssignmentObserver) return;
 
-    function findAdditionalAssignmentCards() {
-      return [...document.querySelectorAll('ui5-text[title="Additional Assignment"]')]
-        .map(titleEl =>
-          titleEl.closest(
-            'div[class^="ListCard_itemContent__"], div[class*=" ListCard_itemContent__"]'
-          )
-        )
-        .filter(Boolean);
-    }
-
-    function findPercentageEl(card, percentage) {
-      const percentageText = `${percentage}%`;
-      return [...card.querySelectorAll("ui5-text")].find(el =>
-        el.getAttribute(enrichedAttr) === percentageText ||
-        el.getAttribute("title") === percentageText ||
-        el.getAttribute("aria-label") === percentageText ||
-        el.textContent.trim() === percentageText
-      );
-    }
-
-    function appendCode(percentageEl, percentage, code) {
-      if (!percentageEl) return false;
-      const percentageText = `${percentage}%`;
-      if (percentageEl.getAttribute(enrichedAttr) === percentageText) return true;
-
-      const bdi = percentageEl.querySelector("bdi") || percentageEl;
-      const currentText = bdi.textContent.trim();
-
-      if (!currentText.includes(code)) {
-        const label = `${currentText} · ${code}`;
-        bdi.textContent = label;
-        percentageEl.setAttribute("title", label);
-        percentageEl.setAttribute("aria-label", label);
-      }
-
-      percentageEl.setAttribute(enrichedAttr, percentageText);
-      return true;
-    }
-
-    function tryEnrich() {
-      const cards = findAdditionalAssignmentCards();
-      if (!cards.length) return false;
-
-      let enrichedCount = 0;
-
-      for (const item of enrichableItems) {
-        const card = cards.find(candidate => findPercentageEl(candidate, item.percentage));
-        const percentageEl = card && findPercentageEl(card, item.percentage);
-
-        if (appendCode(percentageEl, item.percentage, item.code)) {
-          enrichedCount++;
-        }
-      }
-
-      if (enrichedCount) {
-        console.log("✅ Cost Assignment cards enriched:", enrichedCount);
-      }
-
-      return enrichedCount === enrichableItems.length;
-    }
-
-    if (tryEnrich()) return;
-
-    const observer = new MutationObserver(() => {
-      if (done) return;
-
-      if (tryEnrich()) {
-        done = true;
-        observer.disconnect();
-      }
+    costAssignmentObserver = new MutationObserver(() => {
+      scheduleCostAssignmentEnrichment();
     });
 
-    observer.observe(document.documentElement, {
+    costAssignmentObserver.observe(document.body, {
       childList: true,
       subtree: true,
       attributes: true,
       attributeFilter: ["title", "aria-label"]
     });
+  }
 
-    setTimeout(() => {
-      observer.disconnect();
+  function stopCostAssignmentObserver() {
+    costAssignmentObserver?.disconnect();
+    costAssignmentObserver = null;
+  }
 
-      if (!done) {
-        console.warn("⚠️ Cost Assignment cards could not be fully enriched.");
+  function scheduleCostAssignmentEnrichment() {
+    if (costAssignmentScheduled) return;
+    costAssignmentScheduled = true;
+
+    requestAnimationFrame(() => {
+      costAssignmentScheduled = false;
+
+      if (!isLiveProfileRoute()) {
+        stopCostAssignmentObserver();
+        return;
       }
-    }, timeoutMs);
+
+      safeRun("Cost assignment enrichment", applyCostAssignmentEnrichment);
+    });
+  }
+
+  function findAdditionalAssignmentCards() {
+    return [...document.querySelectorAll('ui5-text[title="Additional Assignment"]')]
+      .map(titleEl =>
+        titleEl.closest(
+          'div[class^="ListCard_itemContent__"], div[class*=" ListCard_itemContent__"]'
+        )
+      )
+      .filter(Boolean);
+  }
+
+  function findPercentageEl(card, percentage) {
+    const percentageText = `${percentage}%`;
+    return [...card.querySelectorAll("ui5-text")].find(el =>
+      el.getAttribute(COST_ASSIGNMENT_ENRICHED_ATTR) === percentageText ||
+      el.getAttribute("title") === percentageText ||
+      el.getAttribute("aria-label") === percentageText ||
+      el.textContent.trim() === percentageText
+    );
+  }
+
+  function appendCode(percentageEl, percentage, code) {
+    if (!percentageEl) return false;
+
+    const bdi = percentageEl.querySelector("bdi") || percentageEl;
+    const currentText = bdi.textContent.trim();
+
+    // The text is the source of truth. A reused DOM node with a stale marker
+    // but no code in its text still gets the code appended.
+    if (!currentText.includes(code)) {
+      const label = `${currentText} · ${code}`;
+      bdi.textContent = label;
+      percentageEl.setAttribute("title", label);
+      percentageEl.setAttribute("aria-label", label);
+    }
+
+    percentageEl.setAttribute(COST_ASSIGNMENT_ENRICHED_ATTR, `${percentage}%`);
+    return true;
+  }
+
+  function applyCostAssignmentEnrichment() {
+    if (!latestCostAssignmentItems.length) return true;
+
+    const cards = findAdditionalAssignmentCards();
+    if (!cards.length) return false;
+
+    let enrichedCount = 0;
+
+    for (const item of latestCostAssignmentItems) {
+      const card = cards.find(candidate => findPercentageEl(candidate, item.percentage));
+      const percentageEl = card && findPercentageEl(card, item.percentage);
+
+      if (appendCode(percentageEl, item.percentage, item.code)) {
+        enrichedCount++;
+      }
+    }
+
+    return enrichedCount === latestCostAssignmentItems.length;
   }
 
   function initDocumentGeneratorUserPrefill() {
