@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.6.9
+// @version      1.7.0
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -423,11 +423,7 @@
     function checkRoute() {
       if (window.location.href === lastUrl) return;
       lastUrl = window.location.href;
-      if (routeMatches(location =>
-        [ROUTES.LIVE_PROFILE, ROUTES.LIVE_PROFILE_INTENT].includes(location.pathname)
-      )) {
-        window.sapSfUiHackLiveProfileEnrichment?.refresh();
-      }
+      window.sapSfUiHackLiveProfileEnrichment?.refresh();
       safeRun("runMatchingRouteFeatures", runMatchingRouteFeatures);
     }
 
@@ -543,8 +539,6 @@
       enrichWorkProfiles,
       setLatestWorkProfiles,
       refresh() {
-        findSelectedEmployment()?.removeAttribute(SELECTED_ENRICHED_ATTR);
-        findFullProfileDetailContainer()?.removeAttribute(SELECTED_ENRICHED_ATTR);
         scheduleProfileEnrichment();
       },
     };
@@ -828,25 +822,26 @@
     }
 
     const runId = ++liveProfileEnrichmentRunId;
-    liveProfileEnrichment.setLatestWorkProfiles([]);
 
     response
       .clone()
       .json()
       .then(async data => {
         const id = data?.id;
-        console.log("workforcePersonProfile.id:", id);
         if (!id) return;
+
+        // Clear only when the person really changes, so a re-render or a
+        // failed request never blanks the panel for the same person.
+        if (id !== latestPersonId) {
+          latestPersonId = id;
+          liveProfileEnrichment.setLatestWorkProfiles([]);
+        }
 
         try {
           const workforcePersonProfile =
             await liveProfileEnrichment.getWorkforcePersonProfileDetails(id);
 
-          // Ignore stale fetch results.
-          if (runId !== liveProfileEnrichmentRunId) {
-            console.log("Ignoring stale live profile enrichment result:", id);
-            return;
-          }
+          if (runId !== liveProfileEnrichmentRunId) return; // stale result
 
           workforcePersonProfile.workProfiles = (workforcePersonProfile.workProfiles ?? [])
             .sort((a, b) =>
@@ -858,11 +853,9 @@
             wp.personIdExternal = workforcePersonProfile?.externalId;
           }
 
-          const workProfiles = workforcePersonProfile?.workProfiles || [];
-
-          liveProfileEnrichment.setLatestWorkProfiles(workProfiles);
-          liveProfileEnrichment.enrichWorkProfiles(workProfiles);
-          
+          liveProfileEnrichment.setLatestWorkProfiles(
+            workforcePersonProfile?.workProfiles || []
+          );
         } catch (err) {
           console.error("Failed to fetch workforcePersonProfile details:", err);
         }
@@ -872,6 +865,7 @@
       });
   }
 
+  let latestPersonId = null;
   let latestWorkProfiles = [];
   let latestCostAssignmentItems = [];
   let costAssignmentObserver = null;
