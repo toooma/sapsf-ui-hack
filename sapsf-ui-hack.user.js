@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.6.7
+// @version      1.6.8
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -537,8 +537,7 @@
     const profileDetailsCache = new Map();
 
     let latestWorkProfiles = [];
-    let liveProfileReenrichObserver = null;
-    let reenrichScheduled = false;
+    let profileEnrichScheduled = false;
 
     window.sapSfUiHackLiveProfileEnrichment = {
       getWorkforcePersonProfileDetails,
@@ -547,7 +546,7 @@
       refresh() {
         findSelectedEmployment()?.removeAttribute(SELECTED_ENRICHED_ATTR);
         findFullProfileDetailContainer()?.removeAttribute(SELECTED_ENRICHED_ATTR);
-        if (latestWorkProfiles.length) enrichWorkProfiles(latestWorkProfiles);
+        scheduleProfileEnrichment();
       },
     };
 
@@ -697,12 +696,23 @@
         ?.forEach(el => el.remove());
     }
 
+    function hasCustomRows(container) {
+      return Boolean(container?.querySelector(":scope > ui5-text.ui5Custom"));
+    }
+
     function renderProfileRows(container, profile) {
       if (!container || !profile) return false;
       clearCustomProfileRows(container);
       for (const [label, value] of buildProfileRows(profile)) {
         const textEl = createUi5Text(label, value);
         if (textEl) container.appendChild(textEl);
+      }
+      // Guarantees at least one custom row, so a profile with no visible
+      // values does not look "unrendered" and re-render on every pass.
+      if (!hasCustomRows(container)) {
+        const placeholder = document.createElement("ui5-text");
+        placeholder.classList.add("ui5Custom");
+        container.appendChild(placeholder);
       }
       return true;
     }
@@ -715,18 +725,23 @@
         `ui5-li-custom[id="${escapedId}"]`
       );
       if (!li) return false;
-      if (li.getAttribute(ENRICHED_ATTR) === "true") {
+
+      const container = findEmploymentContainer(li);
+      if (!container) return false;
+
+      if (
+        li.getAttribute(ENRICHED_ATTR) === String(profile.id) &&
+        hasCustomRows(container)
+      ) {
         return true;
       }
-      const container = findEmploymentContainer(li);
-      if (!container) {
-        return false;
-      }
+
       renderProfileRows(container, profile);
-      li.setAttribute(ENRICHED_ATTR, "true");
+      li.setAttribute(ENRICHED_ATTR, String(profile.id));
+
       const orderIndex = latestWorkProfiles.findIndex(p => p.id === profile.id);
       if (orderIndex >= 0) li.style.order = String(orderIndex);
-      console.log("✅ Enriched work profile item:", profile.id);
+
       return true;
     }
 
@@ -744,173 +759,60 @@
 
       const selectedEmployment = findSelectedEmployment();
       const fullProfileContainer = findFullProfileDetailContainer();
-
       if (!selectedEmployment && !fullProfileContainer) return false;
 
-      const enrichmentMarkerEl = selectedEmployment || fullProfileContainer;
-
-      if (enrichmentMarkerEl.getAttribute(SELECTED_ENRICHED_ATTR) === profile.id) {
-        return true;
-      }
-
+      const markerEl = selectedEmployment || fullProfileContainer;
       const container = selectedEmployment
         ? findEmploymentContainer(selectedEmployment)
         : fullProfileContainer;
-
       if (!container) return false;
 
+      if (
+        markerEl.getAttribute(SELECTED_ENRICHED_ATTR) === String(profile.id) &&
+        hasCustomRows(container)
+      ) {
+        return true;
+      }
+
       renderProfileRows(container, profile);
-
-      enrichmentMarkerEl.setAttribute(SELECTED_ENRICHED_ATTR, profile.id);
-
-      console.log("✅ Enriched selected employment:", profile.id);
-
+      markerEl.setAttribute(SELECTED_ENRICHED_ATTR, String(profile.id));
       return true;
+    }
+
+    function applyProfileEnrichment() {
+      if (!isLiveProfileRoute() || !latestWorkProfiles.length) return;
+      for (const profile of latestWorkProfiles) {
+        enrichWorkProfileItem(profile);
+      }
+      enrichSelectedEmployment(latestWorkProfiles);
+    }
+
+    function scheduleProfileEnrichment() {
+      if (profileEnrichScheduled) return;
+      profileEnrichScheduled = true;
+      requestAnimationFrame(() => {
+        profileEnrichScheduled = false;
+        safeRun("Profile enrichment", applyProfileEnrichment);
+      });
+    }
+
+    function enrichWorkProfiles() {
+      // Kept for existing callers. The persistent observer does the real work.
+      scheduleProfileEnrichment();
     }
 
     function setLatestWorkProfiles(workProfiles = []) {
       latestWorkProfiles = workProfiles;
-      ensureLiveProfileReenrichObserver();
+      scheduleProfileEnrichment();
     }
 
-    function hasSelectedEnrichment() {
-      const selectedEmployment = findSelectedEmployment();
-      const fullProfileContainer = findFullProfileDetailContainer();
+    const profileObserver = newObserver(() => scheduleProfileEnrichment());
+    profileObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+    scheduleProfileEnrichment();
 
-      const container = selectedEmployment
-        ? findEmploymentContainer(selectedEmployment)
-        : fullProfileContainer;
-
-      return Boolean(container?.querySelector(":scope > ui5-text.ui5Custom"));
-    }
-
-    function scheduleReenrichIfNeeded() {
-      if (reenrichScheduled) return;
-
-      reenrichScheduled = true;
-
-      requestAnimationFrame(() => {
-        reenrichScheduled = false;
-
-        if (!latestWorkProfiles.length) return;
-
-        const fullProfileContainer = findFullProfileDetailContainer();
-        const selectedEmployment = findSelectedEmployment();
-
-        if (!fullProfileContainer && !selectedEmployment) return;
-
-        if (!hasSelectedEnrichment()) {
-          console.log("🔁 Live Profile enrichment disappeared. Re-enriching...");
-          enrichWorkProfiles(latestWorkProfiles);
-        }
-      });
-    }
-
-    function ensureLiveProfileReenrichObserver() {
-      if (liveProfileReenrichObserver) return;
-
-      liveProfileReenrichObserver = newObserver(mutations => {
-        const relevant = mutations.some(mutation => {
-          if (mutation.type !== "childList") return false;
-
-          if (
-            mutation.target instanceof HTMLElement &&
-            mutation.target.closest("#selectedEmployment")
-          ) {
-            return true;
-          }
-
-          const nodes = [...mutation.addedNodes, ...mutation.removedNodes];
-          return nodes.some(node => {
-            if (!(node instanceof HTMLElement)) return false;
-
-            return (
-              node.id === "selectedEmployment" ||
-              node.matches?.('div[class^="FullProfileDetailView_contentWrapper__"], div[class*=" FullProfileDetailView_contentWrapper__"]') ||
-              node.querySelector?.("#selectedEmployment") ||
-              node.querySelector?.('div[class^="FullProfileDetailView_contentWrapper__"], div[class*=" FullProfileDetailView_contentWrapper__"]')
-            );
-          });
-        });
-
-        if (relevant) {
-          scheduleReenrichIfNeeded();
-        }
-      });
-
-      liveProfileReenrichObserver.observe(document.documentElement, {
-        childList: true,
-        subtree: true
-      });
-
-      console.log("✅ Live Profile persistent re-enrichment observer started.");
-    }
-
-
-    function enrichWorkProfiles(workProfiles = []) {
-      let remaining = [...workProfiles];
-      let selectedDone = false;
-      let scheduled = false;
-      let disconnected = false;
-
-      const observer = new MutationObserver(() => {
-        scheduleTryEnrich();
-      });
-
-      function disconnectObserver() {
-        if (disconnected) return;
-        disconnected = true;
-        observer.disconnect();
-      }
-
-      function shouldStopObserving() {
-        return remaining.length === 0 && selectedDone;
-      }
-
-      function scheduleTryEnrich() {
-        if (scheduled || disconnected) return;
-
-        scheduled = true;
-
-        requestAnimationFrame(() => {
-          scheduled = false;
-          tryEnrich();
-        });
-      }
-
-      function tryEnrich() {
-        if (disconnected) return;
-
-        remaining = remaining.filter(profile => !enrichWorkProfileItem(profile));
-        selectedDone = enrichSelectedEmployment(workProfiles) || selectedDone;
-
-        if (shouldStopObserving()) {
-          disconnectObserver();
-          console.log("✅ All available work profile items enriched.");
-        }
-      }
-
-      observer.observe(document.documentElement, {
-        childList: true,
-        subtree: true
-      });
-
-      scheduleTryEnrich();
-
-      setTimeout(() => {
-        disconnectObserver();
-
-        const shouldWarn = remaining.length > 0 && !selectedDone;
-
-        if (shouldWarn) {
-          console.warn(
-            "⚠️ Some work profile items were not found in DOM:",
-            remaining.map(p => p.id)
-          );
-        }
-      }, 10000);
-    }
-    ensureLiveProfileReenrichObserver();
     ensureCostAssignmentObserver();
     scheduleCostAssignmentEnrichment();
     console.log("✅ Live Profile enrichment module initialized.");
@@ -927,6 +829,7 @@
     }
 
     const runId = ++liveProfileEnrichmentRunId;
+    liveProfileEnrichment.setLatestWorkProfiles([]);
 
     response
       .clone()
