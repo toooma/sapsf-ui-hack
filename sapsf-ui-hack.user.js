@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.7.2
+// @version      1.7.3
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -540,6 +540,29 @@
       setLatestWorkProfiles,
       refresh() {
         scheduleProfileEnrichment();
+      },
+      forceApply() {
+        applyProfileEnrichment();
+      },
+      debug() {
+        const selected = findSelectedEmployment();
+        const selectedContainer = selected ? findEmploymentContainer(selected) : null;
+        const info = {
+          path: window.location.pathname,
+          hash: window.location.hash,
+          profileCount: latestWorkProfiles.length,
+          profileIds: latestWorkProfiles.map(p => p.id),
+          matchedProfileId: findSelectedProfile(latestWorkProfiles)?.id ?? null,
+          selectedFound: Boolean(selected),
+          selectedContainerFound: Boolean(selectedContainer),
+          selectedHasCustomRows: hasCustomRows(selectedContainer),
+          fullProfileContainerFound: Boolean(findFullProfileDetailContainer()),
+          popoverInitialFocus: document
+            .querySelector("ui5-popover[initial-focus]")
+            ?.getAttribute("initial-focus") ?? null
+        };
+        console.log("🔎 Live Profile debug:", info);
+        return info;
       },
     };
 
