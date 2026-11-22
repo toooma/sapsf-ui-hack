@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.7.1
+// @version      1.7.2
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -738,19 +738,33 @@
       return true;
     }
 
-    function enrichSelectedEmployment(workProfiles = []) {
-      const selectedProfileId = document
+    function getSelectedWorkProfileIdFromHash() {
+      const match = window.location.hash.match(/\/(?:profile|detail\/view)\/([^/?&]+)/);
+      return match?.[1] || null;
+    }
+
+    function findSelectedProfile(workProfiles) {
+      const sameId = (a, b) =>
+        Boolean(a) && Boolean(b) && String(a).toUpperCase() === String(b).toUpperCase();
+
+      const hashId = getSelectedWorkProfileIdFromHash();
+      const byHash = hashId && workProfiles.find(p => sameId(p?.id, hashId));
+      if (byHash) return byHash;
+
+      const popoverId = document
         .querySelector("ui5-popover[initial-focus]")
         ?.getAttribute("initial-focus");
+      const byPopover = popoverId && workProfiles.find(p => sameId(p?.id, popoverId));
+      if (byPopover) return byPopover;
 
-      const profile =
-        workProfiles.length === 1
-          ? workProfiles[0]
-          : workProfiles.find(p => p?.id === selectedProfileId);
+      return workProfiles.length === 1 ? workProfiles[0] : null;
+    }
 
+    function enrichSelectedEmployment(workProfiles = []) {
+      const profile = findSelectedProfile(workProfiles);
       if (!profile) return false;
-
       const selectedEmployment = findSelectedEmployment();
+
       const fullProfileContainer = findFullProfileDetailContainer();
       if (!selectedEmployment && !fullProfileContainer) return false;
 
