@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.6.5
+// @version      1.6.6
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -27,6 +27,11 @@
    * 6. Bootstrap
    **************************************************************************/
 
+  if (window.__sapSfUiHackLoaded) {
+    console.warn("⚠️ SAP SuccessFactors UI Hack already loaded; skipping second install.");
+    return;
+  }
+  window.__sapSfUiHackLoaded = true;
   console.log("🔍 SAP SuccessFactors UI Hack userscript starting...");
 
   /**************************************************************************
@@ -70,6 +75,15 @@
   function safeRun(label, fn) {
     try {
       return fn();
+    } catch (err) {
+      console.error(`❌ ${label} failed:`, err);
+      return undefined;
+    }
+  }
+
+  async function safeRunAsync(label, fn) {
+    try {
+      return await fn();
     } catch (err) {
       console.error(`❌ ${label} failed:`, err);
       return undefined;
@@ -156,6 +170,60 @@
     return true;
   }
 
+  function memoizeAsync(cache, key, factory) {
+    if (!cache.has(key)) {
+      const promise = Promise.resolve()
+        .then(factory)
+        .catch(err => {
+          cache.delete(key); // allow a retry after failure
+          throw err;
+        });
+      cache.set(key, promise);
+    }
+    return cache.get(key);
+  }
+
+  let currentFeatureScope = null;
+
+  function newObserver(callback) {
+    const observer = new MutationObserver(callback);
+    currentFeatureScope?.observers.push(observer);
+    return observer;
+  }
+
+  const activeFeatures = new Map();
+
+  const escapeODataString = value => String(value).replace(/'/g, "''");
+
+  const incumbentUserIdCache = new Map();
+  function fetchIncumbentUserId(positionCode, effectiveDate) {
+    if (!positionCode) return Promise.resolve(null);
+    const asOf = effectiveDate || today;
+    return memoizeAsync(incumbentUserIdCache, `${positionCode}|${asOf}`, async () => {
+      const params = new URLSearchParams({
+        "$format": "json",
+        "$filter":
+          `position eq '${escapeODataString(positionCode)}'` +
+          ` and (employmentNav/endDate eq null or employmentNav/endDate ge '${asOf}')`,
+        "$select": "userId",
+        "fromDate": asOf
+      });
+      const data = await fetchJson(`/odata/v2/restricted/EmpJob?${toQueryString(params)}`);
+      return data?.d?.results?.[0]?.userId || null;
+    });
+  }
+
+  const displayNameCache = new Map();
+  function fetchUserDisplayName(userId) {
+    if (!userId) return Promise.resolve(null);
+    return memoizeAsync(displayNameCache, userId, async () => {
+      const data = await fetchJson(
+        `/odata/v2/restricted/User(%27${encodeURIComponent(userId)}%27)?%24format=json&%24select=displayName`
+      );
+      return data?.d?.displayName || null;
+    });
+  }
+
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
   /**************************************************************************
@@ -225,6 +293,7 @@
   function startKeepSessionAliveWhenAvailable() {
     const checkIntervalMs = 1000;
     const keepAliveIntervalMs = 55000;
+    const maxWaitAttempts = 60; // give up after about one minute
 
     const isAvailable = () =>
       typeof window.SFSessionTimeout !== "undefined" &&
@@ -233,7 +302,6 @@
     const extendSessionSafely = () => {
       try {
         if (!isAvailable()) return;
-
         console.log("Extending SAPSF session...");
         window.SFSessionTimeout.extendSession();
       } catch (err) {
@@ -241,12 +309,18 @@
       }
     };
 
+    let attempts = 0;
     const waitTimer = setInterval(() => {
-      if (!isAvailable()) return;
-      clearInterval(waitTimer);
-      console.log("✅ SFSessionTimeout.extendSession is available. Starting keep-alive.");
-      extendSessionSafely();
-      setInterval(extendSessionSafely, keepAliveIntervalMs);
+      attempts++;
+      if (isAvailable()) {
+        clearInterval(waitTimer);
+        console.log("✅ SFSessionTimeout.extendSession is available. Starting keep-alive.");
+        extendSessionSafely();
+        setInterval(extendSessionSafely, keepAliveIntervalMs);
+      } else if (attempts >= maxWaitAttempts) {
+        clearInterval(waitTimer);
+        console.warn("⚠️ SFSessionTimeout not found; keep-alive not started.");
+      }
     }, checkIntervalMs);
   }
 
@@ -323,11 +397,23 @@
 
   function runMatchingRouteFeatures() {
     for (const feature of routeFeatures) {
-      if (!routeMatches(feature.route)) {
-        continue;
-      }
+      const matches = routeMatches(feature.route);
+      const scope = activeFeatures.get(feature.id);
 
-      safeRun(`Route feature "${feature.id}"`, feature.init);
+      if (matches && !scope) {
+        const newScope = { observers: [] };
+        activeFeatures.set(feature.id, newScope);
+        currentFeatureScope = newScope;
+        try {
+          safeRun(`Route feature "${feature.id}"`, feature.init);
+        } finally {
+          currentFeatureScope = null;
+        }
+      } else if (!matches && scope) {
+        scope.observers.forEach(o => o.disconnect());
+        activeFeatures.delete(feature.id);
+        console.log(`🧹 Route feature "${feature.id}" torn down.`);
+      }
     }
   }
 
@@ -638,11 +724,8 @@
       }
       renderProfileRows(container, profile);
       li.setAttribute(ENRICHED_ATTR, "true");
-      // Only move the element after successful enrichment.
-      // Also avoid moving it if it is already the last child.
-      if (li.parentElement && li.parentElement.lastElementChild !== li) {
-        li.parentElement.appendChild(li);
-      }
+      const orderIndex = latestWorkProfiles.findIndex(p => p.id === profile.id);
+      if (orderIndex >= 0) li.style.order = String(orderIndex);
       console.log("✅ Enriched work profile item:", profile.id);
       return true;
     }
@@ -726,7 +809,7 @@
     function ensureLiveProfileReenrichObserver() {
       if (liveProfileReenrichObserver) return;
 
-      liveProfileReenrichObserver = new MutationObserver(mutations => {
+      liveProfileReenrichObserver = newObserver(mutations => {
         const relevant = mutations.some(mutation => {
           if (mutation.type !== "childList") return false;
 
@@ -827,7 +910,7 @@
         }
       }, 10000);
     }
-
+    ensureLiveProfileReenrichObserver();
     console.log("✅ Live Profile enrichment module initialized.");
   }
 
@@ -929,34 +1012,30 @@
 
     function findPercentageEl(card, percentage) {
       const percentageText = `${percentage}%`;
-
-      return [...card.querySelectorAll("ui5-text")]
-        .find(el =>
-          el.getAttribute("title") === percentageText ||
-          el.getAttribute("aria-label") === percentageText ||
-          el.textContent.trim() === percentageText
-        );
+      return [...card.querySelectorAll("ui5-text")].find(el =>
+        el.getAttribute(enrichedAttr) === percentageText ||
+        el.getAttribute("title") === percentageText ||
+        el.getAttribute("aria-label") === percentageText ||
+        el.textContent.trim() === percentageText
+      );
     }
 
-    function appendCode(percentageEl, code) {
-      if (!percentageEl || percentageEl.getAttribute(enrichedAttr) === "true") {
-        return false;
-      }
+    function appendCode(percentageEl, percentage, code) {
+      if (!percentageEl) return false;
+      const percentageText = `${percentage}%`;
+      if (percentageEl.getAttribute(enrichedAttr) === percentageText) return true;
 
       const bdi = percentageEl.querySelector("bdi") || percentageEl;
       const currentText = bdi.textContent.trim();
 
-      if (currentText.includes(code)) {
-        percentageEl.setAttribute(enrichedAttr, "true");
-        return true;
+      if (!currentText.includes(code)) {
+        const label = `${currentText} · ${code}`;
+        bdi.textContent = label;
+        percentageEl.setAttribute("title", label);
+        percentageEl.setAttribute("aria-label", label);
       }
 
-      bdi.textContent = `${currentText} · ${code}`;
-
-      percentageEl.setAttribute("title", `${currentText} · ${code}`);
-      percentageEl.setAttribute("aria-label", `${currentText} · ${code}`);
-      percentageEl.setAttribute(enrichedAttr, "true");
-
+      percentageEl.setAttribute(enrichedAttr, percentageText);
       return true;
     }
 
@@ -970,7 +1049,7 @@
         const card = cards.find(candidate => findPercentageEl(candidate, item.percentage));
         const percentageEl = card && findPercentageEl(card, item.percentage);
 
-        if (appendCode(percentageEl, item.code)) {
+        if (appendCode(percentageEl, item.percentage, item.code)) {
           enrichedCount++;
         }
       }
@@ -1029,14 +1108,6 @@
       );
     }
 
-    function fireJuicFromAttr(el, attr, fallbackEvent) {
-      const code = el?.getAttribute(attr);
-      const match = code && code.match(/juic\.fire$["']([^"']+)["']\s*,\s*["']([^"']+)["']/);
-      if (!match) return false;
-      juic.fire(match[1], match[2], fallbackEvent);
-      return true;
-    }
-
     function isCheckboxReady(checkbox) {
       return (
         checkbox &&
@@ -1045,44 +1116,34 @@
       );
     }
 
+    let checkboxDone = false;
+    let userDone = false;
+
     function tickCheckbox() {
       const checkbox = document.querySelector(checkboxSelector);
-      if (!isCheckboxReady(checkbox)) {
-        return false;
-      }
-      checkbox.click();
-      fireJuicFromAttr(checkbox, "onclick", {
-        type: "click",
-        target: checkbox,
-        currentTarget: checkbox,
-        preventDefault() {},
-        stopPropagation() {}
-      });
+      if (!isCheckboxReady(checkbox)) return false;
+      checkbox.click(); // the native click runs the onclick juic.fire handler
       console.log("✅ Document Generator checkbox ticked.");
       return true;
     }
 
     function trySetUser() {
       const input = document.querySelector(userSelector);
-      if (!isJuicReady(input)) {
-        return false;
-      }
+      if (!isJuicReady(input)) return false;
       const success = juicSetValue(input, `${userId}`);
-      if (success) {
-        console.log("✅ Document Generator user prefilled:", userId);
-      }
+      if (success) console.log("✅ Document Generator user prefilled:", userId);
       return success;
     }
 
     function tryInit() {
-      if (!tickCheckbox()) return false;
-      if (!trySetUser()) return false;
-      return true;
+      if (!checkboxDone) checkboxDone = tickCheckbox();
+      if (!userDone) userDone = trySetUser();
+      return checkboxDone && userDone;
     }
 
     if (tryInit()) return;
 
-    const observer = new MutationObserver(() => {
+    const observer = newObserver(() => {
       if (tryInit()) {
         observer.disconnect();
       }
@@ -1166,7 +1227,7 @@
     const workflowUrl =
       "/odata/v2/restricted/Position?%24format=json&%24expand=wfRequestNav&recordStatus=pending&fromDate=2020-01-01&%24select=code,wfRequestNav%2FwfRequestId";
 
-    let pendingPositionWorkflowsPromise = null;
+    const pendingWorkflowsCache = new Map();
     let scheduled = false;
     let inFlightPositionCode = null;
     let successfulRenderCount = 0;
@@ -1183,11 +1244,9 @@
     }
 
     function fetchPendingPositionWorkflows() {
-      if (!pendingPositionWorkflowsPromise) {
-        pendingPositionWorkflowsPromise = fetchJson(workflowUrl)
-          .then(data => data?.d?.results || []);
-      }
-      return pendingPositionWorkflowsPromise;
+      return memoizeAsync(pendingWorkflowsCache, "all", () =>
+        fetchJson(workflowUrl).then(data => data?.d?.results || [])
+      );
     }
 
     function findWorkflowRequestId(results, positionCode) {
@@ -1278,20 +1337,19 @@
       requestAnimationFrame(() => {
         scheduled = false;
 
-        safeRun("positionPendingWorkflowLink refresh", async () => {
+        safeRunAsync("positionPendingWorkflowLink refresh", async () => {
           await enrichWorkflowLinkIfNeeded();
         });
       });
     }
 
-    const observer = new MutationObserver(() => {
+    const observer = newObserver(() => {
       scheduleEnrichment();
     });
 
-    observer.observe(document.documentElement, {
+    observer.observe(document.body, {
       childList: true,
       subtree: true,
-      characterData: true
     });
 
     scheduleEnrichment();
@@ -1308,9 +1366,6 @@
     const timeoutMs = 10000;
     const LINK_ATTR = "data-sapsf-ui-hack-incumbent-link";
 
-    const incumbentPromiseByPositionCode = new Map();
-    const userPromiseByUserId = new Map();
-
     let scheduled = false;
 
     function findToolbar() {
@@ -1323,48 +1378,6 @@
       document
         .querySelectorAll(`[${LINK_ATTR}="true"]`)
         .forEach(el => el.remove());
-    }
-
-    function fetchIncumbentUserId(positionCode, asOfDate) {
-      if (!positionCode) return Promise.resolve(null);
-
-      const cacheKey = `${positionCode}|${asOfDate || ""}`;
-
-      if (!incumbentPromiseByPositionCode.has(cacheKey)) {
-        const escapedPositionCode = positionCode.replace(/'/g, "''");
-
-        const url =
-          `/odata/v2/restricted/EmpJob?%24format=json` +
-          `&%24filter=position%20eq%20'${encodeURIComponent(escapedPositionCode)}'` +
-          `%20and%20(employmentNav%2FendDate%20eq%20null%20or%20employmentNav%2FendDate%20ge%20'${encodeURIComponent(asOfDate || today)}')` +
-          `&%24select=userId` +
-          `&fromDate=${encodeURIComponent(asOfDate || today)}`;
-
-        incumbentPromiseByPositionCode.set(
-          cacheKey,
-          fetchJson(url).then(data => data?.d?.results?.[0]?.userId || null)
-        );
-      }
-
-      return incumbentPromiseByPositionCode.get(cacheKey);
-    }
-
-
-    function fetchUserDisplayName(userId) {
-      if (!userId) return Promise.resolve(null);
-
-      if (!userPromiseByUserId.has(userId)) {
-        const url =
-          `/odata/v2/restricted/User(%27${encodeURIComponent(userId)}%27)` +
-          `?%24format=json&%24select=displayName`;
-
-        userPromiseByUserId.set(
-          userId,
-          fetchJson(url).then(data => data?.d?.displayName || null)
-        );
-      }
-
-      return userPromiseByUserId.get(userId);
     }
 
     function appendIncumbentLink(toolbar, positionCode, userId, displayName, asOfDate) {
@@ -1516,20 +1529,19 @@
       requestAnimationFrame(() => {
         scheduled = false;
 
-        safeRun("positionIncumbentLink refresh", async () => {
+        safeRunAsync("positionIncumbentLink refresh", async () => {
           await enrichIncumbentIfNeeded();
         });
       });
     }
 
-    const observer = new MutationObserver(() => {
+    const observer = newObserver(() => {
       scheduleEnrichment();
     });
 
-    observer.observe(document.documentElement, {
+    observer.observe(document.body, {
       childList: true,
       subtree: true,
-      characterData: true
     });
 
     scheduleEnrichment();
@@ -1900,7 +1912,7 @@
 
     if (tryInitialize()) return;
 
-    const observer = new MutationObserver(() => {
+    const observer = newObserver(() => {
       if (tryInitialize() || initialized) {
         observer.disconnect();
       }
@@ -2142,30 +2154,6 @@
         : [];
     }
 
-    async function fetchIncumbentUserId(positionCode, effectiveDate) {
-      if (!positionCode) return null;
-      const params = new URLSearchParams({
-        "$format": "json",
-        "$filter":
-          `position eq '${String(positionCode).replace(/'/g, "''")}'` +
-          ` and (employmentNav/endDate eq null or employmentNav/endDate ge '${effectiveDate || today}')`,
-        "$select": "userId",
-        "fromDate": effectiveDate || today
-      });
-      const data = await fetchJson(
-        `/odata/v2/restricted/EmpJob?${toQueryString(params)}`
-      );
-      return data?.d?.results?.[0]?.userId || null;
-    }
-
-    async function fetchUserDisplayName(userId) {
-      if (!userId) return null;
-      const data = await fetchJson(
-        `/odata/v2/restricted/User(%27${encodeURIComponent(userId)}%27)?%24format=json&%24select=displayName`
-      );
-      return data?.d?.displayName || null;
-    }
-
     async function scrapeWorkflowApprovalData() {
       const workflowRequestId = new URLSearchParams(window.location.search).get("workflowRequestId");
       const userInfo = window.pageHeaderJsonData?.userInfo || {};
@@ -2325,7 +2313,7 @@
       }
     }
 
-    const observer = new MutationObserver(() => {
+    const observer = newObserver(() => {
       if (!document.querySelector("h1#pageTitle")) return;
       observer.disconnect();
       initializeButtons();
@@ -2334,7 +2322,7 @@
     if (document.querySelector("h1#pageTitle")) {
       initializeButtons();
     } else {
-      observer.observe(document.documentElement, {
+      observer.observe(document.body, {
         childList: true,
         subtree: true
       });
