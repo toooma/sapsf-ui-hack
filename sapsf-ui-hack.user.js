@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.7.3
+// @version      1.7.4
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -871,6 +871,14 @@
         // failed request never blanks the panel for the same person.
         if (id !== latestPersonId) {
           latestPersonId = id;
+
+          console.log("🧾 Stored work profiles", {
+            personId: id,
+            externalId: workforcePersonProfile?.externalId,
+            displayName: workforcePersonProfile?.displayName,
+            workProfileIds: (workforcePersonProfile?.workProfiles || []).map(p => p.id),
+            requestUrl: response.url
+          });
           liveProfileEnrichment.setLatestWorkProfiles([]);
         }
 
@@ -890,6 +898,13 @@
             wp.personIdExternal = workforcePersonProfile?.externalId;
           }
 
+          console.log("🧾 Stored work profiles", {
+            personId: id,
+            externalId: workforcePersonProfile?.externalId,
+            displayName: workforcePersonProfile?.displayName,
+            workProfileIds: (workforcePersonProfile?.workProfiles || []).map(p => p.id),
+            requestUrl: response.url
+          });
           liveProfileEnrichment.setLatestWorkProfiles(
             workforcePersonProfile?.workProfiles || []
           );
