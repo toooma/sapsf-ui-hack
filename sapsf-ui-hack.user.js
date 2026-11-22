@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.7.4
+// @version      1.7.5
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -786,16 +786,26 @@
     function enrichSelectedEmployment(workProfiles = []) {
       const profile = findSelectedProfile(workProfiles);
       if (!profile) return false;
+
       const selectedEmployment = findSelectedEmployment();
-
       const fullProfileContainer = findFullProfileDetailContainer();
-      if (!selectedEmployment && !fullProfileContainer) return false;
 
-      const markerEl = selectedEmployment || fullProfileContainer;
-      const container = selectedEmployment
-        ? findEmploymentContainer(selectedEmployment)
-        : fullProfileContainer;
-      if (!container) return false;
+      // The full profile block is only a target when there is no context
+      // switcher and the person has exactly one work profile.
+      const useFullProfile = !selectedEmployment && workProfiles.length === 1;
+
+      const markerEl = useFullProfile ? fullProfileContainer : selectedEmployment;
+      const container = useFullProfile
+        ? fullProfileContainer
+        : selectedEmployment && findEmploymentContainer(selectedEmployment);
+
+      // Remove anything an earlier pass wrote to the other target.
+      if (fullProfileContainer && fullProfileContainer !== markerEl) {
+        clearCustomProfileRows(fullProfileContainer);
+        fullProfileContainer.removeAttribute(SELECTED_ENRICHED_ATTR);
+      }
+
+      if (!markerEl || !container) return false;
 
       if (
         markerEl.getAttribute(SELECTED_ENRICHED_ATTR) === String(profile.id) &&
