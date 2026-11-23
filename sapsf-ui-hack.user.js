@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SAP SuccessFactors UI Hack
 // @namespace    https://github.com/toooma/sapsf-ui-hack
-// @version      1.7.6
+// @version      1.7.7
 // @description  Enhances SAP SuccessFactors UI.
 // @match        https://hcm55.sapsf.eu/*
 // @match        https://hcm55preview.sapsf.eu/*
@@ -229,6 +229,34 @@
   /**************************************************************************
    * 2. Global features, running on every page
    **************************************************************************/
+
+  function installPositionCodeSearch() {
+    const wiredInputs = new WeakSet();
+
+    const wireSearchInput = () => {
+      const input = document
+        .querySelector("ui5-shellbar-search-xweb-global-header")
+        ?.shadowRoot
+        ?.querySelector("input");
+      if (!input || wiredInputs.has(input)) return;
+
+      wiredInputs.add(input);
+      input.addEventListener("keydown", event => {
+        if (event.key !== "Enter") return;
+        const positionCode = input.value.trim();
+        if (!/^POS\d+$/i.test(positionCode)) return;
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        window.location.href =
+          `${window.location.origin}${ROUTES.POSITION}?m=PositionManagement&#t=Position&e=${encodeURIComponent(positionCode.toUpperCase())}`;
+      }, true);
+    };
+
+    const observer = newObserver(wireSearchInput);
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    wireSearchInput();
+  }
 
   function applyStyleHacks() {
     const style = document.createElement("style");
@@ -746,10 +774,24 @@
       renderProfileRows(container, profile);
       li.setAttribute(ENRICHED_ATTR, String(profile.id));
 
-      const orderIndex = latestWorkProfiles.findIndex(p => p.id === profile.id);
-      if (orderIndex >= 0) li.style.order = String(orderIndex);
-
       return true;
+    }
+
+    function orderWorkProfileItems(workProfiles) {
+      const list = document.querySelector('ui5-list[data-testid="contextSwitcherList"]');
+      if (!list) return;
+
+      const items = workProfiles
+        .map(profile => list.querySelector(`ui5-li-custom[id="${CSS.escape(String(profile?.id))}"]`))
+        .filter(Boolean);
+      if (items.length < 2) return;
+
+      // Reorder the actual list children. CSS `order` is ignored by some
+      // versions of the SAP UI5 list, leaving the DOM order visible instead.
+      const currentItems = [...list.querySelectorAll(":scope > ui5-li-custom")]
+        .filter(item => items.includes(item));
+      if (items.every((item, index) => item === currentItems[index])) return;
+      for (const item of items) list.appendChild(item);
     }
 
     function getSelectedWorkProfileIdFromHash() {
@@ -813,6 +855,7 @@
       for (const profile of latestWorkProfiles) {
         enrichWorkProfileItem(profile);
       }
+      orderWorkProfileItems(latestWorkProfiles);
       enrichSelectedEmployment(latestWorkProfiles);
     }
 
@@ -2295,6 +2338,8 @@
 
   function bootstrap() {
     safeRun("startKeepSessionAliveWhenAvailable", startKeepSessionAliveWhenAvailable);
+
+    safeRun("installPositionCodeSearch", installPositionCodeSearch);
 
     safeRun("applyStyleHacks", applyStyleHacks);
 
